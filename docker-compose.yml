@@ -9,6 +9,12 @@ services:
       # buckets on the real client IP (see app/main.py:_client_ip). The api service
       # is only reachable via Caddy (expose, not ports), so the header is trustworthy.
       CAREFIND_TRUST_PROXY: "true"
+      # Scope uvicorn's proxy-header trust to the edge network's subnet (below), so
+      # only the Caddy container — never some other host that reaches the port — is
+      # trusted to set X-Forwarded-For. Replaces the old --forwarded-allow-ips "*".
+      FORWARDED_ALLOW_IPS: "172.28.0.0/24"
+    networks:
+      - edge
     volumes:
       - carefind-data:/data        # persists Medicare index + geocode cache
       # Optional: wire verified FHIR payers. Create payers.json first
@@ -34,10 +40,20 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    networks:
+      - edge
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+
+networks:
+  # Fixed subnet so FORWARDED_ALLOW_IPS (on the api service) can name it as a CIDR.
+  # Both services live here; the api is only reachable via Caddy on this network.
+  edge:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
 
 volumes:
   carefind-data:
