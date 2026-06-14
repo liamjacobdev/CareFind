@@ -52,6 +52,16 @@ def init_db() -> None:
             "  created_at TEXT DEFAULT CURRENT_TIMESTAMP"
             ")"
         )
+        # Reverse-geocode cache (coords -> ZIP) for the 'Near me' button. Kept
+        # separate from geocache because a ZIP is a TEXT value whose leading zeros
+        # (e.g. 02134) would be destroyed by geocache's REAL lat/lon columns.
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS revcache ("
+            "  key TEXT PRIMARY KEY,"
+            "  postcode TEXT,"
+            "  created_at TEXT DEFAULT CURRENT_TIMESTAMP"
+            ")"
+        )
 
 
 # ── Medicare index ──────────────────────────────────────────────────────────
@@ -149,4 +159,24 @@ def geocode_set(key: str, lat, lon) -> None:
         conn.execute(
             "INSERT OR REPLACE INTO geocache (key, lat, lon) VALUES (?, ?, ?)",
             (key, lat, lon),
+        )
+
+
+# ── Reverse-geocode cache (coords -> ZIP) ─────────────────────────────────────
+def revgeocode_get(key: str):
+    """Return the cached ZIP string for a coordinate key, or None if not cached.
+    An empty-string value is a real cached 'no ZIP here' answer and is returned
+    as such, so we don't re-hit the network for a known miss."""
+    with _conn() as conn:
+        row = conn.execute("SELECT postcode FROM revcache WHERE key = ?", (key,)).fetchone()
+        if row is not None:
+            return row["postcode"] or ""
+    return None
+
+
+def revgeocode_set(key: str, postcode: str) -> None:
+    with _write_lock, _conn() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO revcache (key, postcode) VALUES (?, ?)",
+            (key, postcode or ""),
         )

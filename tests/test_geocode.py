@@ -7,7 +7,14 @@ from app import db, geocode
 from app.config import settings
 
 CENSUS = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+CENSUS_REV = "https://geocoding.geo.census.gov/geocoder/geographies/coordinates"
 NOMINATIM = "https://nominatim.openstreetmap.org/search"
+NOMINATIM_REV = "https://nominatim.openstreetmap.org/reverse"
+
+
+def _census_rev_hit(zip_code):
+    return httpx.Response(200, json={"result": {"geographies": {
+        "2020 Census ZIP Code Tabulation Areas": [{"ZCTA5": zip_code, "GEOID": zip_code}]}}})
 
 
 def _census_hit(lat, lon):
@@ -78,3 +85,48 @@ async def test_batch_uses_cache_and_census(temp_db, monkeypatch):
     assert out["cached"] == [10.0, 20.0]
     assert out["live"] == [30.0, -86.0]
     assert route.call_count == 1  # only the uncached address hit the network
+
+
+# ── Reverse geocoding (coords -> ZIP, for 'Near me') ──────────────────────────
+@respx.mock
+@pytest.mark.asyncio
+async def test_reverse_census_resolves_zip_and_caches(temp_db, monkeypatch):
+    monkeypatch.setattr(settings, "geocode_use_census", True)
+    route = respx.get(CENSUS_REV).mock(return_value=_census_rev_hit("20006"))
+
+    zip_code = await geocode.reverse(38.8977, -77.0365)
+    assert zip_code == "20006"
+    # Warm tap: served from revcache with no second HTTP call.
+    again = await geocode.reverse(38.8977, -77.0365)
+    assert again == "20006"
+    assert route.call_count == 1
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_reverse_falls_back_to_nominatim(temp_db, monkeypatch):
+    monkeypatch.setattr(settings, "geocode_use_census", True)
+    monkeypatch.setattr(settings, "geocode_min_interval", 0.0)
+    census = respx.get(CENSUS_REV).mock(return_value=httpx.Response(500))
+    nomin = respx.get(NOMINATIM_REV).mock(
+        return_value=httpx.Response(200, json={"address": {"postcode": "02134"}})
+    )
+
+    zip_code = await geocode.reverse(42.0, -71.0)
+    assert zip_code == "02134"
+    assert census.called and nomin.called
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_reverse_transient_failure_not_cached(temp_db, monkeypatch):
+    monkeypatch.setattr(settings, "geocode_use_census", True)
+    monkeypatch.setattr(settings, "geocode_min_interval", 0.0)
+    census = respx.get(CENSUS_REV).mock(return_value=httpx.Response(500))
+    nomin = respx.get(NOMINATIM_REV).mock(return_value=httpx.Response(500))
+
+    assert await geocode.reverse(10.0, 20.0) == ""
+    # Both sources failed -> nothing cached, so a retry hits the network again.
+    census.reset()
+    await geocode.reverse(10.0, 20.0)
+    assert census.called

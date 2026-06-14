@@ -175,21 +175,79 @@ async def geocode_batch(items: list, budget_seconds: float = None) -> dict:
     return out
 
 
-async def reverse(lat, lon) -> str:
-    """ZIP from coordinates (used by 'Near me'). Stays on Nominatim — Census reverse
-    is a separate endpoint and Nominatim already works here when CAREFIND_UA is set."""
-    try:
-        async with httpx.AsyncClient(timeout=12) as client:
-            await _throttle()
-            resp = await client.get(
-                settings.nominatim_base + "/reverse",
-                params={"lat": lat, "lon": lon, "format": "json"},
-                headers={"Accept": "application/json", "User-Agent": settings.contact_ua},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        if isinstance(data, dict):
-            return (data.get("address") or {}).get("postcode", "") or ""
-    except Exception:
-        pass
+# ── Reverse geocoding (coords -> ZIP, for 'Near me') ──────────────────────────
+def _rev_key(lat, lon) -> str:
+    """Cache key for a coordinate. Rounded to ~11 m so the cache survives the tiny
+    jitter between successive browser geolocation fixes; ZIP areas are far larger."""
+    return f"{float(lat):.4f},{float(lon):.4f}"
+
+
+async def _census_reverse(client: httpx.AsyncClient, lat, lon) -> str:
+    """Keyless ZIP lookup via the Census geographies/coordinates benchmark — mirrors
+    the forward Census path so 'Near me' works out of the box with no CAREFIND_UA.
+    The ZIP Code Tabulation Area (ZCTA5) is the ZIP for this point."""
+    resp = await client.get(
+        settings.census_base + "/geocoder/geographies/coordinates",
+        params={
+            "x": lon, "y": lat,  # x = longitude, y = latitude
+            "benchmark": "Public_AR_Current",
+            "vintage": "Current_Current",
+            "layers": "all",
+            "format": "json",
+        },
+        headers={"Accept": "application/json"},
+    )
+    resp.raise_for_status()
+    geos = (((resp.json() or {}).get("result") or {}).get("geographies")) or {}
+    for layer, rows in geos.items():
+        if "zip" in layer.lower() or "zcta" in layer.lower():
+            if rows:
+                zc = rows[0].get("ZCTA5") or rows[0].get("GEOID") or ""
+                if zc:
+                    return str(zc)
     return ""
+
+
+async def _nominatim_reverse(client: httpx.AsyncClient, lat, lon) -> str:
+    await _throttle()
+    resp = await client.get(
+        settings.nominatim_base + "/reverse",
+        params={"lat": lat, "lon": lon, "format": "json"},
+        headers={"Accept": "application/json", "User-Agent": settings.contact_ua},
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if isinstance(data, dict):
+        return (data.get("address") or {}).get("postcode", "") or ""
+    return ""
+
+
+async def reverse(lat, lon) -> str:
+    """ZIP from coordinates (used by 'Near me'). Census first (keyless, works on a
+    fresh install), Nominatim as a fallback. Cached in revcache so repeated 'Near me'
+    taps don't re-hit the network. Returns '' when no ZIP can be resolved."""
+    try:
+        lat_f, lon_f = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return ""
+    key = _rev_key(lat_f, lon_f)
+    cached = db.revgeocode_get(key)
+    if cached is not None:
+        return cached
+    zip_code = ""
+    async with httpx.AsyncClient(timeout=12) as client:
+        if census_enabled():
+            try:
+                zip_code = await _census_reverse(client, lat_f, lon_f)
+            except Exception:
+                zip_code = ""  # fall through to Nominatim
+        if not zip_code:
+            try:
+                zip_code = await _nominatim_reverse(client, lat_f, lon_f)
+            except Exception:
+                zip_code = ""
+    # Only cache a definite answer; a transient failure (both sources errored) stays
+    # uncached so the next tap retries instead of pinning an empty result.
+    if zip_code:
+        db.revgeocode_set(key, zip_code)
+    return zip_code
