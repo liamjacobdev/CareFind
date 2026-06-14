@@ -274,9 +274,15 @@ async def providers_search(
         raw = await nppes.search(q)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    except Exception:
+    except Exception as e:
+        log.warning("provider search failed (zip=%s city=%s state=%s name=%s): %s: %s",
+                    zip, city, state, name, type(e).__name__, e)
         raise HTTPException(502, "Could not reach the registry.")
 
+    # Did the upstream NPPES pool itself hit its ceiling? If so even the post-filter
+    # total below is a lower bound (there may be matches we never fetched), so the UI
+    # shows "N of M+" rather than implying M is exhaustive.
+    pool_capped = len(raw) >= pool_limit
     providers = [normalize(r) for r in raw]
 
     want = [a for a in accepts.split(",") if a.strip()]
@@ -337,7 +343,17 @@ async def providers_search(
 
     # Cap to the requested limit. For a radius search the pool was widened and
     # distance-sorted above, so this keeps the closest `limit`; it also caps the
-    # plain (no-radius) path.
+    # plain (no-radius) path. Capture the pre-truncation total so the UI can honestly
+    # say "showing N of M" instead of silently dropping the rest.
+    total_matched = len(providers)
     providers = providers[:limit]
+    truncated = total_matched > len(providers)
 
-    return {"count": len(providers), "plans": registry.plans(), "providers": providers}
+    return {
+        "count": len(providers),
+        "total": total_matched,        # matches after all filters, within the fetched pool
+        "truncated": truncated,        # True when results beyond `limit` were dropped
+        "pool_capped": pool_capped,    # True when `total` is itself a lower bound
+        "plans": registry.plans(),
+        "providers": providers,
+    }

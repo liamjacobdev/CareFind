@@ -803,7 +803,7 @@ async function handleSearch(){
   const token=++state.token;
   state.radius=(!f.npi && f.radius)?parseInt(f.radius,10)||0:0;
   state.searching=true; setSearchLoading(true);
-  clearMarkers(); state.providers=[]; state.activeNpi=null;
+  clearMarkers(); state.providers=[]; state.activeNpi=null; state.searchMeta=null;
   switchTabSilent('results');
   writeUrl(f);
 
@@ -818,13 +818,15 @@ async function handleSearch(){
       // One call: NPPES + real insurance flags + server-side batched geocoding.
       // If the backend is simply not running, fall through to the direct-registry
       // path below so the page still works (a 400 = real bad query, surfaced).
-      let providers=null;
-      try { providers=await backendSearch(f); }
+      let result=null;
+      try { result=await backendSearch(f); }
       catch(err){ if(!(err && err.unreachable)) throw err; noteBackendFallback(); }
-      if(providers!==null){
+      if(result!==null){
         if(token!==state.token) return;
+        const providers=result.providers;
         if(!providers.length){ showEmptyState(describeNoResults(f)); finishSearch(); return; }
         state.providers=providers;
+        state.searchMeta=result.meta;
         applySort(); renderCards();
         if(mapInstance) plotMarkers();   // coords are already attached — pins now, no wait
         document.getElementById('results-count-header').textContent=`${providers.length} provider${providers.length!==1?'s':''} found`;
@@ -886,7 +888,12 @@ async function backendSearch(f){
     const e=new Error('The CareFind API is unreachable.'); e.unreachable=true; throw e;
   }
   const data=await res.json();
-  return (data.providers||[]).map(adaptBackendProvider);
+  return {
+    providers:(data.providers||[]).map(adaptBackendProvider),
+    // Truncation metadata so the results bar can honestly say "showing N of M"
+    // instead of silently dropping the rest of the pool (backend T1.4).
+    meta:{ total:data.total, truncated:!!data.truncated, poolCapped:!!data.pool_capped },
+  };
 }
 
 // Tell the user (once per session) we're querying the official registry directly
@@ -1296,7 +1303,17 @@ function updateResultsBar(){
   const exportWrap=document.getElementById('export-wrap');
   if(state.activeTab==='results' && state.providers.length){
     bar.style.display='flex'; sortWrap.style.display='inline-flex'; exportWrap.style.display='none';
-    txt.innerHTML=`<b>${state.providers.length}</b> providers${state.centerLabel?` near ${esc(state.centerLabel)}`:''}${estimatedFilterHint()}`;
+    const shown=state.providers.length;
+    const m=state.searchMeta;
+    // When the backend dropped results past the limit, say so plainly ("showing N
+    // of M") instead of presenting the truncated slice as the whole set. A capped
+    // upstream pool means M is itself a floor, shown as "M+".
+    const count=(m && m.truncated && m.total>shown)
+      ? `<b>${shown}</b> of ${m.total}${m.poolCapped?'+':''} providers`
+      : `<b>${shown}</b> providers`;
+    const near=state.centerLabel?` near ${esc(state.centerLabel)}`:'';
+    const more=(m && m.truncated)?` <span class="results-hint">· refine your search to see more</span>`:'';
+    txt.innerHTML=`${count}${near}${estimatedFilterHint()}${more}`;
   } else if(state.activeTab==='favorites' && Object.keys(state.favorites).length){
     bar.style.display='flex'; sortWrap.style.display='none'; exportWrap.style.display='inline-flex';
     txt.innerHTML=`<b>${Object.keys(state.favorites).length}</b> saved`;

@@ -217,3 +217,9 @@ def test_radius_filters_and_sorts_before_truncation(temp_db, monkeypatch):
     dists = [p["distance"] for p in providers]
     assert all(d is not None and d <= 25 for d in dists)
     assert dists == sorted(dists)
+    # T1.4: truncation is surfaced, not silent. Three providers are within radius;
+    # limit=2 returns the closest two and reports the full in-radius total honestly.
+    assert data["count"] == 2
+    assert data["total"] == 3
+    assert data["truncated"] is True
+    assert data["pool_capped"] is False  # pool (4) well under the ceiling
