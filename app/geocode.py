@@ -14,6 +14,7 @@ serialized by the throttle) within an optional time budget so a slow geocoder ca
 never block the caller.
 """
 import asyncio
+import logging
 import math
 import time
 
@@ -21,6 +22,8 @@ import httpx
 
 from . import db
 from .config import settings
+
+log = logging.getLogger("carefind.geocode")
 
 _rate_lock = asyncio.Lock()
 _last_call = 0.0
@@ -100,11 +103,13 @@ async def _geocode_live(client: httpx.AsyncClient, q: str):
             coords = await _census_search(client, q)
             if coords:
                 return coords
-        except Exception:
-            pass  # fall through to Nominatim
+        except Exception as e:
+            log.warning("Census geocode failed for %r, trying Nominatim: %s: %s",
+                        q, type(e).__name__, e)  # fall through to Nominatim
     try:
         return await _nominatim_search(client, q)
-    except Exception:
+    except Exception as e:
+        log.warning("Nominatim geocode failed for %r: %s: %s", q, type(e).__name__, e)
         return None
 
 
@@ -118,7 +123,8 @@ async def geocode_one(q: str):
     try:
         async with httpx.AsyncClient(timeout=12) as client:
             coords = await _geocode_live(client, q)
-    except Exception:
+    except Exception as e:
+        log.warning("Geocode client error for %r: %s: %s", q, type(e).__name__, e)
         return None
     if coords:
         db.geocode_set(key, coords[0], coords[1])
@@ -239,13 +245,15 @@ async def reverse(lat, lon) -> str:
         if census_enabled():
             try:
                 zip_code = await _census_reverse(client, lat_f, lon_f)
-            except Exception:
-                zip_code = ""  # fall through to Nominatim
+            except Exception as e:
+                log.warning("Census reverse failed for (%s,%s), trying Nominatim: %s: %s",
+                            lat_f, lon_f, type(e).__name__, e)  # fall through
         if not zip_code:
             try:
                 zip_code = await _nominatim_reverse(client, lat_f, lon_f)
-            except Exception:
-                zip_code = ""
+            except Exception as e:
+                log.warning("Nominatim reverse failed for (%s,%s): %s: %s",
+                            lat_f, lon_f, type(e).__name__, e)
     # Only cache a definite answer; a transient failure (both sources errored) stays
     # uncached so the next tap retries instead of pinning an empty result.
     if zip_code:

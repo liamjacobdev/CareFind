@@ -205,7 +205,11 @@ async def api_npi(
         return {"results": await nppes.search(locals())}
     except ValueError as e:
         raise HTTPException(400, str(e))
-    except Exception:
+    except Exception as e:
+        # Keep the user-facing 502 generic, but record what actually failed so a
+        # broken upstream (NPPES down, network error) is visible in the logs.
+        log.warning("NPPES search failed (zip=%s city=%s state=%s npi=%s name=%s): %s: %s",
+                    zip, city, state, npi, name, type(e).__name__, e)
         raise HTTPException(502, "Could not reach the registry.")
 
 

@@ -20,6 +20,7 @@ Per-provider results have the shape:
                "source": <source id>}}
 """
 import asyncio
+import logging
 import time
 
 import httpx
@@ -27,6 +28,8 @@ import httpx
 from . import db
 from .catalog import CATEGORY_ORDER, PAYER_CATALOG, category_label
 from .config import settings
+
+log = logging.getLogger("carefind.insurance")
 
 # Highest-confidence wins when several sources answer for one plan.
 _CONFIDENCE_RANK = {"verified": 2, "estimated": 1}
@@ -179,8 +182,12 @@ class FhirPlanNetSource(InsuranceSource):
                 return False
             r.raise_for_status()
             bundle = r.json()
-        except Exception:
-            return None  # unknown — never a fabricated yes
+        except Exception as e:
+            # Degrade to "unknown" (never a fabricated yes), but log which payer/NPI
+            # endpoint failed so a down or misconfigured Plan-Net directory is visible.
+            log.warning("FHIR Plan-Net check failed (payer=%s npi=%s url=%s): %s: %s",
+                        self.id, npi, url, type(e).__name__, e)
+            return None
         return self._in_network(bundle)
 
     async def check(self, npi: str):
@@ -249,8 +256,11 @@ class Registry:
         for cfg in settings.load_payers():
             try:
                 sources.append(FhirPlanNetSource(cfg))
-            except Exception:
-                pass
+            except Exception as e:
+                # A malformed payers.json entry shouldn't kill startup, but it must
+                # not vanish silently either — name the offending entry.
+                log.warning("Skipping FHIR payer entry %r: %s: %s",
+                            (cfg or {}).get("id", cfg), type(e).__name__, e)
         # Verified commercial payers ingested from Transparency-in-Coverage files.
         # Always register one TiC source per catalog payer; availability is checked
         # live (with a short TTL) like Medicare, so a payer ingested AFTER startup
@@ -320,7 +330,11 @@ class Registry:
             for s in srcs:
                 try:
                     per_source.append((s, await s.check_many_ctx(contexts)))
-                except Exception:
+                except Exception as e:
+                    # One source failing degrades its plan to "unknown" for this
+                    # batch; the rest still answer. Record which source broke.
+                    log.warning("Insurance source %r failed for %d NPIs: %s: %s",
+                                s.id, len(npis), type(e).__name__, e)
                     per_source.append((s, {n: None for n in npis}))
             for npi in npis:
                 best = None  # (rank, definite, value, source)

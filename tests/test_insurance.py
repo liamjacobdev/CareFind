@@ -108,3 +108,20 @@ async def test_fhir_check_many_concurrent_mapping():
     assert out["1111111111"] is True
     assert out["2222222222"] is False
     assert out["3333333333"] is False  # 404 -> not in network
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_fhir_upstream_error_degrades_and_logs(temp_db, caplog):
+    """A failing FHIR source must not crash the request: it degrades to 'unknown'
+    (None) AND emits a WARNING naming the payer/NPI (T1.2 observability)."""
+    base = "https://payer.example/r4"
+    respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(503))
+    src = FhirPlanNetSource({"id": "demo", "label": "Demo", "base_url": base})
+
+    with caplog.at_level("WARNING", logger="carefind.insurance"):
+        out = await src.check_many(["1111111111"])
+
+    assert out["1111111111"] is None  # degraded, not fabricated
+    assert any("FHIR Plan-Net check failed" in r.message and "demo" in r.message
+               for r in caplog.records)
