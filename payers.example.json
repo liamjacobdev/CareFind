@@ -1,0 +1,13 @@
+{
+  "_comment": "Verified commercial payers wired via their public FHIR Plan-Net Provider Directory (CMS-9115-F). Copy to payers.json and add the payers whose networks you want as VERIFIED filters. Each entry maps to a plan id the UI groups under `category`. Optional `payer` defaults to `id`; add `api_key_header`/`api_key` if the payer requires a free developer key. Payers you do NOT wire here still appear as clearly-labeled ESTIMATED filters from the curated catalog (app/catalog.py).",
+  "payers": [
+    {
+      "id": "priority_partners",
+      "label": "Priority Partners (JHHP)",
+      "category": "medicaid",
+      "payer": "priority_partners",
+      "base_url": "https://api.jhhpfhir.com/r4/public-pp",
+      "npi_system": "http://hl7.org/fhir/sid/us-npi"
+    }
+  ]
+}

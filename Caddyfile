@@ -1,0 +1,17 @@
+# Replace api.yourdomain.com with the subdomain whose A record points at this
+# server. Caddy fetches and renews a Let's Encrypt TLS cert automatically.
+api.yourdomain.com {
+	# reverse_proxy sets X-Forwarded-For by default; the api container runs uvicorn
+	# with --proxy-headers and CAREFIND_TRUST_PROXY=true so the per-client rate
+	# limiter buckets on the real client IP rather than this proxy's container IP.
+	reverse_proxy api:8000
+	encode gzip
+
+	# CareFind sets per-route CORS itself (see ALLOWED_ORIGINS); nothing to add here.
+	header {
+		# Sensible security headers for an API behind TLS.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+}
