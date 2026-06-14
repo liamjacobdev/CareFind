@@ -363,7 +363,7 @@
       </div>
       <div class="header-right">
         <span id="results-count-header" aria-live="polite"></span>
-        <button class="header-cta" data-action="open-claim">For providers</button>
+        <button class="header-cta" id="provider-cta" data-action="open-claim" hidden>For providers</button>
         <a class="header-link" href="https://npiregistry.cms.hhs.gov/" target="_blank" rel="noopener">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
           Source: CMS NPPES
@@ -565,6 +565,9 @@ const ALLOW_PUBLIC_PROXIES = false;
 // (providers@carefind.example) silently drops "claim your listing" / "For
 // providers" requests. Override per-deploy rather than shipping the example value.
 const CLAIM_EMAIL   = 'providers@carefind.example';
+// While CLAIM_EMAIL is still the placeholder, every claim affordance is hidden so
+// we never render a dead mailto:. configure_frontend.py --claim-email flips this on.
+const CLAIM_ENABLED = CLAIM_EMAIL !== 'providers@carefind.example';
 const NPI_API       = 'https://npiregistry.cms.hhs.gov/api/';
 const NOMINATIM      = 'https://nominatim.openstreetmap.org';
 const LS_KEY        = 'carefind_saved_v4';
@@ -1390,7 +1393,7 @@ function buildDetail(doc){
       <a class="action-btn" href="${record}" target="_blank" rel="noopener" style="width:100%; margin-top:6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/></svg>View official CMS record</a>
     </div>
 
-    <p class="claim-line">Are you this provider? <button data-action="open-claim" data-npi="${esc(doc.npi)}">Claim this listing</button></p>`;
+    ${CLAIM_ENABLED ? `<p class="claim-line">Are you this provider? <button data-action="open-claim" data-npi="${esc(doc.npi)}">Claim this listing</button></p>` : ''}`;
 }
 
 /* ════════════════════════════════════════════
@@ -1633,6 +1636,10 @@ async function bootstrap(){
 
   loadFavorites(); loadGeocache(); updateFavBadge(); renderCards();
   loadPlans();
+
+  // Reveal the "For providers" claim CTA only when a real inbox is configured;
+  // otherwise it stays hidden (no dead mailto). See CLAIM_ENABLED.
+  if(CLAIM_ENABLED){ const cta=document.getElementById('provider-cta'); if(cta) cta.hidden=false; }
 
   document.getElementById('zip-input').addEventListener('keydown',e=>{ if(e.key==='Enter') handleSearch(); });
   document.getElementById('zip-input').addEventListener('input',e=>{ e.target.value=e.target.value.replace(/\D/g,'').slice(0,5); });
