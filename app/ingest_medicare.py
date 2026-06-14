@@ -16,11 +16,12 @@ from . import db
 
 def _open_source(src: str):
     if src.startswith(("http://", "https://")):
-        import httpx
+        from .download import stream_to_spool
         print(f"Downloading {src} ...", flush=True)
-        resp = httpx.get(src, follow_redirects=True, timeout=300)
-        resp.raise_for_status()
-        return io.StringIO(resp.text)
+        # Stream to a spooled temp file (bounded memory, aborts past the cap) and
+        # parse it incrementally — the enrollment CSV is never held whole in RAM.
+        spool = stream_to_spool(src)  # bounded by settings.ingest_max_bytes
+        return io.TextIOWrapper(spool, encoding="utf-8-sig", newline="")
     # utf-8-sig strips the BOM CMS exports sometimes carry.
     return open(src, "r", encoding="utf-8-sig", newline="")
 

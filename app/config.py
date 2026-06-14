@@ -55,6 +55,12 @@ class Settings:
         # Where to find configured commercial payers (see payers.example.json).
         self.payers_file = os.environ.get("CAREFIND_PAYERS", "payers.json")
 
+        # Hard ceiling on a single ingest download (TiC / Medicare). Remote files
+        # are streamed and aborted the moment they exceed this, so a hostile or
+        # mistyped URL can't OOM the box by being read fully into memory. Default
+        # 2 GiB — well above any real single-payer file, far below "exhaust RAM".
+        self.ingest_max_bytes = int(os.environ.get("CAREFIND_INGEST_MAX_BYTES", str(2 * 1024**3)))
+
         # Polite minimum seconds between live Nominatim requests (their usage
         # policy is max 1 req/sec). The cache means we rarely hit this.
         self.geocode_min_interval = float(os.environ.get("GEOCODE_MIN_INTERVAL", "1.0"))

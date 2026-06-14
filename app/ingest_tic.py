@@ -34,11 +34,9 @@ _CATALOG_IDS = {e["id"] for e in PAYER_CATALOG}
 
 def _open_bytes(src: str) -> bytes:
     if src.startswith(("http://", "https://")):
-        import httpx
+        from .download import stream_to_bytes
         print(f"Downloading {src} ...", flush=True)
-        resp = httpx.get(src, follow_redirects=True, timeout=600)
-        resp.raise_for_status()
-        return resp.content
+        return stream_to_bytes(src)  # bounded by settings.ingest_max_bytes
     with open(src, "rb") as fh:
         return fh.read()
 
