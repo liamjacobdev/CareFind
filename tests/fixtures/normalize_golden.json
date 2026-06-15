@@ -1,0 +1,43 @@
+{
+  "_comment": "Shared golden record for the cross-language normalize parity test (T1.5). The Python backend normalize() (app/main.py) and the JS frontend buildProviders() (carefind.logic.js) must both produce these structural fields for this NPPES record. Renaming or changing a field on either side breaks its test. Phone/fax are intentionally excluded: the backend returns them raw and the frontend formats them downstream.",
+  "record": {
+    "number": "1003000126",
+    "enumeration_type": "NPI-1",
+    "basic": {
+      "first_name": "jane", "last_name": "doe", "credential": "M.D.", "status": "A",
+      "gender": "F", "sole_proprietor": "NO",
+      "enumeration_date": "2010-05-01", "last_updated": "2020-06-15"
+    },
+    "addresses": [
+      {"address_purpose": "LOCATION", "address_1": "1 main st", "address_2": "ste 200",
+       "city": "crestview", "state": "FL", "postal_code": "325361234",
+       "telephone_number": "8505551234", "fax_number": "8505556789"},
+      {"address_purpose": "MAILING", "address_1": "po box 9", "city": "crestview",
+       "state": "FL", "postal_code": "32536"}
+    ],
+    "taxonomies": [
+      {"desc": "Cardiovascular Disease", "code": "207RC0000X", "primary": true, "state": "FL", "license": "MD123"}
+    ]
+  },
+  "expected": {
+    "npi": "1003000126",
+    "name": "Jane Doe, M.D",
+    "isOrg": false,
+    "specialty": "Cardiovascular Disease",
+    "address1": "1 Main St Ste 200",
+    "city": "Crestview",
+    "stateAb": "FL",
+    "postalCode": "32536",
+    "fullAddress": "1 Main St Ste 200, Crestview, FL, 32536",
+    "mailingAddress": "Po Box 9, Crestview, FL, 32536",
+    "gender": "Female",
+    "soleProprietor": "NO",
+    "credential": "M.D.",
+    "status": "Active",
+    "enumerationDate": "2010-05-01",
+    "lastUpdated": "2020-06-15",
+    "taxonomies": [
+      {"desc": "Cardiovascular Disease", "code": "207RC0000X", "primary": true, "state": "FL", "license": "MD123"}
+    ]
+  }
+}

@@ -1,8 +1,15 @@
 """End-to-end HTTP tests with a mocked registry (no live NPPES/Nominatim)."""
+import json
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app import db, main
+
+_GOLDEN = json.loads(
+    (Path(__file__).parent / "fixtures" / "normalize_golden.json").read_text(encoding="utf-8")
+)
 
 # Two NPPES-shaped records: one enrolled in Medicare, one not.
 CANNED = [
@@ -46,6 +53,16 @@ def test_plans_grouped(client):
     assert "categories" in data and "plans" in data
     cat_ids = {c["id"] for c in data["categories"]}
     assert {"medicare", "commercial"} <= cat_ids
+
+
+def test_normalize_matches_golden(temp_db):
+    """T1.5 (Python half): the backend normalize() produces the shared structural
+    fields the frontend buildProviders() must also produce. The JS half asserts the
+    same fixture in tests-js/parity.test.js, so renaming a field on either side fails
+    CI. Phone/fax are excluded (backend raw, frontend formats downstream)."""
+    out = main.normalize(_GOLDEN["record"])
+    for key, val in _GOLDEN["expected"].items():
+        assert out[key] == val, f"normalize() field {key!r} drifted from the golden fixture"
 
 
 def test_frontend_logic_js_served(client):
