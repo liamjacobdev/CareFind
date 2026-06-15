@@ -1,0 +1,15 @@
+{
+  "_comment": "Per-payer Transparency-in-Coverage in-network source URLs for the scheduled ingest job (app/ingest_tic_job). Copy to tic_sources.json and fill in each payer's published in-network file URL. 'payer' must match a catalog id in app/catalog.py so the verified ingest supersedes the estimate. Re-run monthly; ingestion is idempotent. Document each URL + retrieval date in the README.",
+  "sources": [
+    {
+      "payer": "aetna",
+      "url": "https://example-payer.com/tic/in-network-index.json.gz",
+      "note": "Aetna machine-readable index — replace with the real published URL"
+    },
+    {
+      "payer": "cigna",
+      "url": "https://example-payer.com/tic/cigna-in-network.json.gz",
+      "note": "Cigna machine-readable index — replace with the real published URL"
+    }
+  ]
+}

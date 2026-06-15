@@ -56,6 +56,23 @@ python -m app.ingest_tic aetna /path/to/aetna_npis.csv
 python -m app.ingest_tic cigna "https://payer.example/in-network.json.gz"
 ```
 
+**Scheduled refresh (monthly).** For ongoing operation, list each payer's published
+in-network URL once in `tic_sources.json` (copy `tic_sources.example.json`) and run
+the job — it ingests every configured payer and reports which flipped to *verified*.
+Re-running is **idempotent**, so it's safe on a monthly cron:
+
+```bash
+cp tic_sources.example.json tic_sources.json   # then fill in real per-payer URLs
+python -m app.ingest_tic_job          # refresh all configured payers
+python -m app.ingest_tic_job aetna    # refresh just one
+```
+
+Document each payer's source URL and the date you retrieved it here as you wire them:
+
+| Payer | TiC in-network source URL | Retrieved |
+|-------|---------------------------|-----------|
+| _(add each payer's published machine-readable index URL as you configure it)_ | | |
+
 > Honest scope note: there is **no single free API** for all commercial insurers. The **estimated** tier gives you broad, recognizable named-payer filters on day one (clearly labeled, never presented as confirmed); the **verified** tier grows as you wire FHIR Plan-Net endpoints and ingest Transparency-in-Coverage files. Medicare is verified and national out of the box.
 
 ---

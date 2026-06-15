@@ -55,6 +55,11 @@ class Settings:
         # Where to find configured commercial payers (see payers.example.json).
         self.payers_file = os.environ.get("CAREFIND_PAYERS", "payers.json")
 
+        # Per-payer Transparency-in-Coverage source URLs for the scheduled ingest job
+        # (see tic_sources.example.json). Maps a catalog payer id -> its published
+        # in-network file URL, so a monthly cron can refresh every payer in one run.
+        self.tic_sources_file = os.environ.get("CAREFIND_TIC_SOURCES", "tic_sources.json")
+
         # FHIR Plan-Net result cache TTLs (seconds). A definite answer (in-network /
         # not-found) is stable, so it's cached for a day; an "unknown" (the payer's
         # endpoint errored/timed out) is cached only briefly so a recovered endpoint

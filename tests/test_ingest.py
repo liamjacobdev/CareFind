@@ -3,11 +3,13 @@
 The remote ingest paths must abort an over-limit body without reading it fully
 into memory; a normal local file must still ingest.
 """
+import json
+
 import httpx
 import pytest
 import respx
 
-from app import db, ingest_medicare, ingest_tic
+from app import db, ingest_medicare, ingest_tic, ingest_tic_job
 from app.config import settings
 from app.download import DownloadTooLarge, stream_to_bytes, stream_to_spool
 
@@ -57,3 +59,31 @@ def test_medicare_ingest_local_file_still_works(temp_db):
     added = ingest_medicare.ingest("sample_medicare.csv")
     assert added > 0
     assert db.medicare_count() == added
+
+
+# ── T3.3: scheduled TiC ingestion job ─────────────────────────────────────────
+def test_tic_job_flips_payer_to_verified_and_is_idempotent(temp_db, tmp_path):
+    """Running the job for a payer ingests its in-network NPIs and flips it to a
+    verified filter; re-running it changes nothing (idempotent — safe on a cron)."""
+    npi_file = tmp_path / "aetna_npis.txt"
+    npi_file.write_text("1003000126\n1003000134\n1003000142\n", encoding="utf-8")
+    sources = tmp_path / "tic_sources.json"
+    sources.write_text(json.dumps({"sources": [
+        {"payer": "aetna", "url": str(npi_file)}]}), encoding="utf-8")
+
+    first = ingest_tic_job.run(only_payer="aetna", sources_path=str(sources))
+    assert first[0]["verified"] is True
+    assert first[0]["total"] == 3
+
+    # Re-run: same source, no duplicates, still verified — idempotent.
+    second = ingest_tic_job.run(only_payer="aetna", sources_path=str(sources))
+    assert second[0]["total"] == 3
+    assert second[0]["verified"] is True
+    assert db.tic_count("aetna") == 3
+
+
+def test_tic_job_missing_source_errors_clearly(temp_db, tmp_path):
+    sources = tmp_path / "tic_sources.json"
+    sources.write_text(json.dumps({"sources": []}), encoding="utf-8")
+    with pytest.raises(SystemExit):
+        ingest_tic_job.run(only_payer="cigna", sources_path=str(sources))
