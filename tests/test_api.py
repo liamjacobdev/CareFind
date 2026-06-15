@@ -74,6 +74,19 @@ def test_frontend_logic_js_served(client):
     assert "function buildProviders" in r.text
 
 
+@pytest.mark.parametrize("path", ["/", "/carefind.logic.js"])
+def test_static_files_etag_304(client, path):
+    """T4.2: static frontend files carry an ETag + Cache-Control, and a repeat load
+    with If-None-Match returns 304 (not re-downloaded)."""
+    r1 = client.get(path)
+    assert r1.status_code == 200
+    etag = r1.headers.get("etag")
+    assert etag and "cache-control" in r1.headers
+    r2 = client.get(path, headers={"If-None-Match": etag})
+    assert r2.status_code == 304
+    assert r2.headers.get("etag") == etag
+
+
 def test_search_attaches_confidence_shape(client):
     data = client.get("/api/providers/search?zip=32536&geocode=false").json()
     assert data["count"] == 2

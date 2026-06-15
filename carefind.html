@@ -341,8 +341,17 @@
     .header-cta { display:none; }
   }
   @media (prefers-reduced-motion:reduce) {
-    *, *::before, *::after { animation-duration:.001ms !important; transition-duration:.001ms !important; }
-    .credential .dot { animation:none; }
+    *, *::before, *::after {
+      animation-duration:.001ms !important;
+      animation-iteration-count:1 !important;   /* stop infinite loops (pulse/spin/shimmer) */
+      transition-duration:.001ms !important;
+      scroll-behavior:auto !important;
+    }
+    /* Kill the decorative/looping + entrance animations outright, and Leaflet's
+       marker/zoom transitions, so nothing non-essential moves. */
+    .credential .dot, .skeleton, .spinner { animation:none !important; }
+    .card-enter, .state-block { animation:none !important; }
+    .leaflet-zoom-animated, .leaflet-marker-icon { transition:none !important; }
   }
   </style>
 </head>
@@ -1516,7 +1525,11 @@ function showToast(msg){
   t.style.opacity='1'; t.style.transform='translateX(-50%) translateY(0)';
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateX(-50%) translateY(8px)'; },2300);
 }
-function shake(el){ el.style.animation='none'; void el.offsetHeight; el.style.animation='shake .35s ease'; el.addEventListener('animationend',()=>{el.style.animation='';},{once:true}); }
+function shake(el){
+  // Honor reduced-motion: skip the shake entirely (the toast still conveys the error).
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  el.style.animation='none'; void el.offsetHeight; el.style.animation='shake .35s ease'; el.addEventListener('animationend',()=>{el.style.animation='';},{once:true});
+}
 function openAdv(open){ const f=document.getElementById('adv-fields'),t=document.getElementById('adv-toggle'); f.classList.toggle('open',open); t.setAttribute('aria-expanded',String(open)); }
 
 /* ── Geolocation ── */

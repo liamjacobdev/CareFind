@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from . import db, geocode, nppes
@@ -173,19 +173,32 @@ _FRONTEND = Path(__file__).resolve().parent.parent / "carefind.html"
 _FRONTEND_LOGIC = _FRONTEND.parent / "carefind.logic.js"
 
 
+def _static_file(request: Request, path: Path, media_type: str, missing: str):
+    """Serve a static file with an ETag + short Cache-Control, and answer a matching
+    If-None-Match with 304 so a repeat load isn't re-downloaded. The ETag is derived
+    from the file's mtime+size, so editing the file invalidates caches automatically."""
+    if not path.exists():
+        raise HTTPException(404, missing)
+    st = path.stat()
+    etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
+    headers = {"Cache-Control": "public, max-age=300, must-revalidate", "ETag": etag}
+    inm = request.headers.get("if-none-match", "")
+    if etag in [t.strip() for t in inm.split(",") if t.strip()]:
+        return Response(status_code=304, headers=headers)
+    return FileResponse(path, media_type=media_type, headers=headers)
+
+
 @app.get("/")
-def index():
-    if _FRONTEND.exists():
-        return FileResponse(_FRONTEND, media_type="text/html")
-    raise HTTPException(404, "Frontend (carefind.html) not found next to the app package.")
+def index(request: Request):
+    return _static_file(request, _FRONTEND, "text/html",
+                        "Frontend (carefind.html) not found next to the app package.")
 
 
 @app.get("/carefind.logic.js")
-def frontend_logic():
+def frontend_logic(request: Request):
     # The page loads its pure logic from this sibling file (also unit-tested by Vitest).
-    if _FRONTEND_LOGIC.exists():
-        return FileResponse(_FRONTEND_LOGIC, media_type="application/javascript")
-    raise HTTPException(404, "carefind.logic.js not found next to the app package.")
+    return _static_file(request, _FRONTEND_LOGIC, "application/javascript",
+                        "carefind.logic.js not found next to the app package.")
 
 
 @app.get("/healthz")
