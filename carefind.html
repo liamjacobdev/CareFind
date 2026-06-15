@@ -605,10 +605,20 @@ const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','
    ════════════════════════════════════════════ */
 const LEAFLET_CSS = ['https://unpkg.com/leaflet@1.9.4/dist/leaflet.css','https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css','https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css'];
 const LEAFLET_JS  = ['https://unpkg.com/leaflet@1.9.4/dist/leaflet.js','https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js','https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js'];
+// Optional clustering so a dense result set doesn't overlap into an unreadable mass.
+const CLUSTER_CSS = ['https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css','https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css'];
+const CLUSTER_CSS2= ['https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css','https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.min.css'];
+const CLUSTER_JS  = ['https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js','https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js'];
 let leafletOk = false;
 function loadStylesheet(urls){ return new Promise(res=>{ let i=0; (function n(){ if(i>=urls.length) return res(false); const l=document.createElement('link'); l.rel='stylesheet'; l.href=urls[i++]; l.onload=()=>res(true); l.onerror=()=>{l.remove();n();}; document.head.appendChild(l); })(); }); }
 function loadScriptChain(urls){ return new Promise(res=>{ let i=0; (function n(){ if(i>=urls.length) return res(false); const s=document.createElement('script'); s.src=urls[i++]; s.async=false; s.onload=()=>res(true); s.onerror=()=>{s.remove();n();}; document.head.appendChild(s); })(); }); }
-const leafletReady = (async()=>{ if(window.L){leafletOk=true;return true;} loadStylesheet(LEAFLET_CSS); const ok=await loadScriptChain(LEAFLET_JS); leafletOk=ok&&!!window.L; return leafletOk; })();
+const leafletReady = (async()=>{
+  if(!window.L){ loadStylesheet(LEAFLET_CSS); const ok=await loadScriptChain(LEAFLET_JS); leafletOk=ok&&!!window.L; }
+  else leafletOk=true;
+  // Clustering is best-effort: if it fails to load, markers just plot individually.
+  if(leafletOk && !window.L.markerClusterGroup){ loadStylesheet(CLUSTER_CSS); loadStylesheet(CLUSTER_CSS2); await loadScriptChain(CLUSTER_JS); }
+  return leafletOk;
+})();
 
 /* ════════════════════════════════════════════
    STATE
@@ -618,7 +628,7 @@ const state = {
   center:null, centerLabel:'', searching:false, token:0, sort:'relevance', geocache:{},
   plans:[], categories:[], selectedPlans:[], insMode:'verified', radius:0,
 };
-let mapInstance=null, mapMarkers={}, centerMarker=null;
+let mapInstance=null, mapMarkers={}, centerMarker=null, markerClusterLayer=null;
 
 /* ════════════════════════════════════════════
    NETWORK — same-origin when served, resilient fallback for file://
@@ -713,9 +723,15 @@ function initMap(){
     mapInstance=L.map('map',{center:[39.5,-98.35],zoom:4,zoomControl:true,attributionControl:true});
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:19,
       attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'}).addTo(mapInstance);
+    // Cluster dense pins when the plugin is available; otherwise markers go on the map directly.
+    markerClusterLayer = L.markerClusterGroup
+      ? L.markerClusterGroup({maxClusterRadius:50, showCoverageOnHover:false, spiderfyOnMaxZoom:true, chunkedLoading:true}).addTo(mapInstance)
+      : null;
     setTimeout(()=>{ if(mapInstance) mapInstance.invalidateSize(); },280);
   } catch(e){ console.error('Leaflet init failed:',e); mapInstance=null; }
 }
+// Add a marker to the cluster layer when present, else straight onto the map.
+function _addMarker(m){ if(markerClusterLayer) markerClusterLayer.addLayer(m); else m.addTo(mapInstance); }
 function createMarkerIcon(color, active){
   return L.divIcon({ className:'', html:`<div class="marker-pin ${active?'active':''}" style="background:${color};"></div>`,
     iconSize:active?[34,34]:[26,26], iconAnchor:active?[17,34]:[13,26], popupAnchor:[0,active?-32:-24] });
@@ -733,7 +749,7 @@ function plotMarkers(){
     m.bindPopup(buildPopup(doc),{maxWidth:280,className:'carefind-popup'});
     m.on('click',()=>selectDoctor(doc.npi,false));
     m.on('popupopen',()=>{ updateMarkerStyles(doc.npi); highlightCard(doc.npi); });
-    m.addTo(mapInstance); mapMarkers[doc.npi]=m; bounds.extend([doc.lat,doc.lng]);
+    _addMarker(m); mapMarkers[doc.npi]=m; bounds.extend([doc.lat,doc.lng]);
   });
   if(bounds.isValid()) mapInstance.fitBounds(bounds,{padding:[50,50],maxZoom:14});
   else if(state.center) mapInstance.setView(state.center,11);
@@ -746,9 +762,13 @@ function addOrMoveMarker(doc){
   m.bindPopup(buildPopup(doc),{maxWidth:280,className:'carefind-popup'});
   m.on('click',()=>selectDoctor(doc.npi,false));
   m.on('popupopen',()=>{ updateMarkerStyles(doc.npi); highlightCard(doc.npi); });
-  m.addTo(mapInstance); mapMarkers[doc.npi]=m;
+  _addMarker(m); mapMarkers[doc.npi]=m;
 }
-function clearMarkers(){ Object.values(mapMarkers).forEach(m=>m.remove()); mapMarkers={}; if(centerMarker){centerMarker.remove();centerMarker=null;} }
+function clearMarkers(){
+  if(markerClusterLayer) markerClusterLayer.clearLayers();
+  Object.values(mapMarkers).forEach(m=>m.remove()); mapMarkers={};
+  if(centerMarker){centerMarker.remove();centerMarker=null;}
+}
 function updateMarkerStyles(activeNpi){
   state.activeNpi=activeNpi;
   state.providers.forEach(doc=>{ const m=mapMarkers[doc.npi]; if(!m) return; const a=doc.npi===activeNpi; m.setIcon(createMarkerIcon(doc.color,a)); m.setZIndexOffset(a?1000:0); });
