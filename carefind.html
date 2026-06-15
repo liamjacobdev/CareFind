@@ -340,6 +340,12 @@
     .view-toggle button.active { background:var(--jade); color:#fff; }
     .header-cta { display:none; }
   }
+  /* Keyboard skip-link: off-screen until focused, then pinned top-left. */
+  .skip-link { position:fixed; top:8px; left:8px; z-index:1000; transform:translateY(-150%);
+    background:var(--jade-d,#0f7a5f); color:#fff; padding:9px 14px; border-radius:8px;
+    font-size:.85rem; font-weight:600; text-decoration:none; box-shadow:var(--shadow-md);
+    transition:transform .15s var(--ease,ease); }
+  .skip-link:focus { transform:translateY(0); outline:2px solid #fff; outline-offset:2px; }
   @media (prefers-reduced-motion:reduce) {
     *, *::before, *::after {
       animation-duration:.001ms !important;
@@ -356,6 +362,7 @@
   </style>
 </head>
 <body>
+<a href="#main" class="skip-link">Skip to results</a>
 <div id="app">
   <!-- ════════ HEADER ════════ -->
   <header id="header">
@@ -437,8 +444,8 @@
           </div>
 
           <div class="field" id="insurance-field" style="display:none;">
-            <label>Insurance accepted <span class="opt">(verified &amp; estimated)</span></label>
-            <div id="insurance-filter"></div>
+            <label id="insurance-field-label">Insurance accepted <span class="opt">(verified &amp; estimated)</span></label>
+            <div id="insurance-filter" role="group" aria-labelledby="insurance-field-label"></div>
           </div>
 
           <button class="adv-toggle" id="adv-toggle" data-action="toggle-adv" aria-expanded="false" type="button">
@@ -945,7 +952,8 @@ function renderInsuranceFilter(){
       return `<button type="button" role="checkbox" aria-checked="${on?'true':'false'}" class="ins-chip ${on?'checked':''}" data-action="toggle-plan" data-plan="${esc(pl.id)}" title="${esc(title)}">
         <span class="tick">${on?CHECK_SVG:''}</span>${esc(pl.label)}<span class="conf-dot ${conf}" aria-hidden="true"></span></button>`;
     }).join('');
-    return `<div class="ins-group"><p class="ins-group-title">${esc(c.label)}</p><div class="ins-chips">${chips}</div></div>`;
+    const gid=`ins-group-${esc(c.id)}`;
+    return `<div class="ins-group" role="group" aria-labelledby="${gid}"><p class="ins-group-title" id="${gid}">${esc(c.label)}</p><div class="ins-chips">${chips}</div></div>`;
   }).filter(Boolean).join('');
   const mode=showEstimated?'any':'verified';
   const legend=showEstimated
