@@ -16,7 +16,7 @@ CareFind covers **many plans, grouped by category** (Medicare, Medicare Advantag
 - **Verified** (green *Confirmed* badge): confirmed for *this* provider from a real source — the Medicare enrollment file, a payer's FHIR Plan-Net directory, or an ingested Transparency-in-Coverage file.
 - **Estimated** (amber *Likely* badge): a major payer that operates in the provider's state, from the curated catalog in `app/catalog.py`. Shown as "likely — confirm with the provider," **never** as confirmed. A verified source always supersedes an estimate.
 
-The filter has a **Verified only / Include estimated** toggle (`accepts_mode=verified|any`), defaulting to verified to protect trust.
+**Verified by default.** The filter defaults to **Verified only**: estimated payers are hidden from the filter, estimated badges never render, and search requires confirmed acceptance (`accepts_mode=verified`). The **Include estimated** toggle (`accepts_mode=any`) is the *only* way estimates surface, and even then they read "likely — confirm," never *Confirmed*. As a payer gets backed by a verified source (FHIR Plan-Net or a TiC ingest) it graduates to a green *Confirmed* filter automatically — no UI change, because the catalog `id` is the stable join key.
 
 ### Source 1 — Medicare (works once you ingest one file)
 The CMS **Medicare Fee-For-Service Public Provider Enrollment** dataset lists every NPI approved to bill Medicare. It's free, national, and updated quarterly.

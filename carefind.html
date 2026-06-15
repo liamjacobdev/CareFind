@@ -923,8 +923,13 @@ function renderInsuranceFilter(){
   const cats=(state.categories&&state.categories.length)
     ? state.categories
     : [{id:'all',label:'Plans',plans:state.plans}];
+  // Verified-by-default: estimated payers are hidden until the user opts in via
+  // "Include estimated", so the default filter offers only Confirmed plans.
+  const showEstimated=state.insMode==='any';
   const groups=cats.map(c=>{
-    const chips=c.plans.map(pl=>{
+    const plans=c.plans.filter(pl=>showEstimated || pl.confidence==='verified');
+    if(!plans.length) return '';
+    const chips=plans.map(pl=>{
       const on=state.selectedPlans.includes(pl.id);
       const conf=pl.confidence==='verified'?'verified':'estimated';
       const title=conf==='verified'?'Verified from a real source':'Estimated — confirm with the provider';
@@ -932,17 +937,29 @@ function renderInsuranceFilter(){
         <span class="tick">${on?CHECK_SVG:''}</span>${esc(pl.label)}<span class="conf-dot ${conf}" aria-hidden="true"></span></button>`;
     }).join('');
     return `<div class="ins-group"><p class="ins-group-title">${esc(c.label)}</p><div class="ins-chips">${chips}</div></div>`;
-  }).join('');
-  const mode=state.insMode==='any'?'any':'verified';
+  }).filter(Boolean).join('');
+  const mode=showEstimated?'any':'verified';
+  const legend=showEstimated
+    ? `<p class="ins-legend"><span class="conf-dot verified" aria-hidden="true"></span> Confirmed from a real source <span class="conf-dot estimated" aria-hidden="true"></span> Likely — confirm with provider</p>`
+    : `<p class="ins-legend"><span class="conf-dot verified" aria-hidden="true"></span> Confirmed from a real source — turn on “Include estimated” to also see likely (unconfirmed) plans.</p>`;
   wrap.innerHTML=`
     <div class="ins-mode" role="group" aria-label="Match strictness">
       <button type="button" class="${mode==='verified'?'active':''}" aria-pressed="${mode==='verified'?'true':'false'}" data-action="ins-mode" data-mode="verified">Verified only</button>
       <button type="button" class="${mode==='any'?'active':''}" aria-pressed="${mode==='any'?'true':'false'}" data-action="ins-mode" data-mode="any">Include estimated</button>
     </div>
-    <p class="ins-legend"><span class="conf-dot verified" aria-hidden="true"></span> Confirmed from a real source <span class="conf-dot estimated" aria-hidden="true"></span> Likely — confirm with provider</p>
+    ${legend}
     <div class="ins-groups">${groups}</div>`;
 }
-function setInsMode(m){ state.insMode=(m==='any')?'any':'verified'; renderInsuranceFilter(); }
+function setInsMode(m){
+  state.insMode=(m==='any')?'any':'verified';
+  // Switching back to verified-only drops any estimated selections, so a now-hidden
+  // estimate can't silently keep filtering results.
+  if(state.insMode!=='any'){
+    state.selectedPlans=state.selectedPlans.filter(id=>{ const pm=planMeta(id); return pm && pm.confidence==='verified'; });
+  }
+  renderInsuranceFilter();
+  if(state.providers && state.providers.length) renderCards();  // badges reflect the new mode
+}
 function togglePlan(id){
   const i=state.selectedPlans.indexOf(id);
   if(i>=0) state.selectedPlans.splice(i,1); else state.selectedPlans.push(id);
@@ -1099,18 +1116,19 @@ function insuranceBadgesHtml(doc){
     const info=ins[id]; if(!info||info.value!==true) continue;
     if(info.confidence==='verified'){
       out.push(`<span class="ins-badge">${chk}${esc(planLabel(id))}</span>`);          // green "Confirmed"
-    } else if(state.selectedPlans.includes(id)){
-      out.push(`<span class="ins-badge likely">${esc(planLabel(id))} · likely</span>`); // amber, only for filtered plans
+    } else if(state.insMode==='any' && state.selectedPlans.includes(id)){
+      out.push(`<span class="ins-badge likely">${esc(planLabel(id))} · likely</span>`); // amber, only when estimates are opted into AND filtered
     }
   }
   return out.join('');
 }
 function coverageHtml(doc, insSearch){
   const ins=doc.insurance||{};
-  // Show every verified result, plus estimated plans the user actually filtered on.
+  // Show every verified result, plus — only when estimates are opted into — the
+  // estimated plans the user actually filtered on. Verified-by-default otherwise.
   const ids=Object.keys(ins).filter(id=>{
     const info=ins[id]; if(!info) return false;
-    return info.confidence==='verified' || state.selectedPlans.includes(id);
+    return info.confidence==='verified' || (state.insMode==='any' && state.selectedPlans.includes(id));
   });
   if(HAS_BACKEND && ids.length){
     ids.sort((a,b)=>{
