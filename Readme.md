@@ -47,6 +47,21 @@ Copy `payers.example.json` to `payers.json` and add the payers whose networks yo
 
 Some payers ask you to register for a free API key; add `"api_key_header"` and `"api_key"` to that payer's entry if so. A payer returns **in-network / not-found / unknown** — CareFind never turns "unknown" into a yes.
 
+**Validated public endpoints** (live-checked 2026-06-15 — each returned a real `PractitionerRole` Bundle with no auth; record the date you re-check):
+
+| Payer (scope) | catalog mapping | Base URL | Live check |
+|---|---|---|---|
+| Priority Partners — Johns Hopkins (MD Medicaid) | `priority_partners` | `https://api.jhhpfhir.com/r4/public-pp` | Bundle total 83,024 |
+| Premera Blue Cross (WA/AK only) | needs a regional catalog entry — **do not** map to national `bcbs` | `https://opala.tech/provdir/premera/v1/fhir-r4` | Bundle total 94,993 |
+
+> **Honest finding on national payers:** the big national carriers in the catalog
+> (UnitedHealthcare, Aetna, Cigna) do **not** expose a clean *public, unauthenticated*
+> Plan-Net `PractitionerRole` endpoint — they gate behind developer registration; Humana
+> publishes one (`https://fhir.humana.com/api`) but it timed out unauthenticated on our
+> check. So the cleanly-wireable endpoints today are **regional** payers. Wire those
+> against a *correctly-scoped* catalog id (don't map a WA/AK payer to national BCBS — that
+> would overclaim). The verified tier grows as you obtain registered access to the nationals.
+
 ### Source 3 — Transparency-in-Coverage (verified commercial, by ingest)
 Every commercial plan must publish machine-readable in-network files. Ingest a payer's in-network NPIs and that payer becomes a **verified** filter — a *Confirmed* badge that supersedes its estimated catalog entry. The payer id must match a catalog entry (`app/catalog.py`), e.g. `aetna`, `cigna`, `unitedhealthcare`:
 

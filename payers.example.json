@@ -2,11 +2,21 @@
   "_comment": "Verified commercial payers wired via their public FHIR Plan-Net Provider Directory (CMS-9115-F). Copy to payers.json and add the payers whose networks you want as VERIFIED filters. Each entry maps to a plan id the UI groups under `category`. Optional `payer` defaults to `id`; add `api_key_header`/`api_key` if the payer requires a free developer key. Payers you do NOT wire here still appear as clearly-labeled ESTIMATED filters from the curated catalog (app/catalog.py).",
   "payers": [
     {
+      "_note": "Maryland Medicaid MCO (Johns Hopkins). Public Plan-Net, no auth. Live-validated 2026-06-15: /PractitionerRole returned a Bundle of 83,024.",
       "id": "priority_partners",
       "label": "Priority Partners (JHHP)",
       "category": "medicaid",
       "payer": "priority_partners",
       "base_url": "https://api.jhhpfhir.com/r4/public-pp",
+      "npi_system": "http://hl7.org/fhir/sid/us-npi"
+    },
+    {
+      "_note": "Premera Blue Cross (WA/AK only — NOT national BCBS), hosted by Opala. Public Plan-Net, no auth. Live-validated 2026-06-15: /PractitionerRole returned a Bundle of 94,993. Add a matching regional entry to app/catalog.py before enabling so it surfaces as a named filter without overclaiming national BCBS.",
+      "id": "premera_bcbs",
+      "label": "Premera Blue Cross (WA/AK)",
+      "category": "commercial",
+      "payer": "premera_bcbs",
+      "base_url": "https://opala.tech/provdir/premera/v1/fhir-r4",
       "npi_system": "http://hl7.org/fhir/sid/us-npi"
     }
   ]

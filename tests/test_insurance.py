@@ -196,6 +196,29 @@ async def test_fhir_cache_stale_unknown_refetches_and_recovers(temp_db, monkeypa
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_fhir_wired_payer_returns_verified(temp_db, monkeypatch):
+    """T3.2: a payer wired via FHIR Plan-Net (payers.json) returns confidence
+    'verified' for a known in-network NPI, and that verified answer supersedes the
+    payer's estimated catalog entry. (respx-mocked stand-in for a live Plan-Net
+    endpoint; see the README for the validated real endpoints + manual live-check.)"""
+    base = "https://api.payer.example/r4"
+    # Wire 'cigna' (a catalog id) to a FHIR Plan-Net endpoint, as payers.json would.
+    monkeypatch.setattr(settings, "load_payers", lambda: [
+        {"id": "cigna", "label": "Cigna", "base_url": base, "category": "commercial"}])
+    respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(200, json=_IN_NETWORK))
+
+    reg = Registry()
+    reg.build()
+    # The plan now reports verified confidence (FHIR supersedes the estimate).
+    cigna_plan = next(p for p in reg.plans() if p["id"] == "cigna")
+    assert cigna_plan["confidence"] == "verified"
+
+    ann = await reg.annotate([{"npi": "1003000126", "stateAb": "CA"}], only=["cigna"])
+    assert ann["1003000126"]["cigna"] == {"value": True, "confidence": "verified", "source": "cigna"}
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_fhir_cache_stale_definite_refetches(temp_db, monkeypatch):
     monkeypatch.setattr(settings, "fhir_cache_ttl", 0)  # definite answers always stale
     base = "https://payer.example/r4"
