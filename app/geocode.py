@@ -20,7 +20,7 @@ import time
 
 import httpx
 
-from . import db
+from . import db, metrics
 from .config import settings
 
 log = logging.getLogger("carefind.geocode")
@@ -109,6 +109,7 @@ async def _geocode_live(client: httpx.AsyncClient, q: str):
     try:
         return await _nominatim_search(client, q)
     except Exception as e:
+        metrics.incr("upstream_error")
         log.warning("Nominatim geocode failed for %r: %s: %s", q, type(e).__name__, e)
         return None
 
@@ -119,7 +120,9 @@ async def geocode_one(q: str):
     key = _key(q)
     cached = db.geocode_get(key)
     if cached is not None:
+        metrics.incr("geocode_hit")
         return cached
+    metrics.incr("geocode_miss")
     try:
         async with httpx.AsyncClient(timeout=12) as client:
             coords = await _geocode_live(client, q)
@@ -150,9 +153,11 @@ async def geocode_batch(items: list, budget_seconds: float = None) -> dict:
         cached = db.geocode_get(_key(q))
         if cached is not None:
             out[k] = cached
+            metrics.incr("geocode_hit")
         else:
             pending.append((k, q))
 
+    metrics.incr("geocode_miss", len(pending))
     if not pending:
         return out
 

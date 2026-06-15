@@ -2,6 +2,7 @@
 real insurance acceptance. Deploy behind TLS on your own domain (see README)."""
 import logging
 import time
+import uuid
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
-from . import db, geocode, nppes
+from . import db, geocode, metrics, nppes
 from .config import settings
 from .insurance import registry
 
@@ -95,6 +96,31 @@ async def rate_limit(request: Request, call_next):
             )
         dq.append(now)
     return await call_next(request)
+
+
+@app.middleware("http")
+async def request_context(request: Request, call_next):
+    """Assign each request a short id (echoed as X-Request-ID and logged with the
+    outcome, so a client's report is correlatable to a log line), and tally request
+    metrics. Honors an inbound X-Request-ID from the trusted proxy for trace continuity."""
+    rid = request.headers.get("x-request-id") if settings.trust_proxy else None
+    rid = rid or uuid.uuid4().hex[:12]
+    request.state.request_id = rid
+    start = time.monotonic()
+    try:
+        response = await call_next(request)
+    except Exception:
+        metrics.incr("requests_total")
+        metrics.incr("status:500")
+        log.exception("unhandled error rid=%s %s %s", rid, request.method, request.url.path)
+        raise
+    dur_ms = (time.monotonic() - start) * 1000
+    metrics.incr("requests_total")
+    metrics.incr(f"status:{response.status_code}")
+    response.headers["X-Request-ID"] = rid
+    log.info("rid=%s %s %s -> %d (%.1fms)",
+             rid, request.method, request.url.path, response.status_code, dur_ms)
+    return response
 
 
 # CORS: lock to configured origins in production. With none set we allow only
@@ -206,6 +232,13 @@ def healthz():
     return {"ok": True, "medicare_npis": db.medicare_count(), "insurance_plans": registry.plans()}
 
 
+@app.get("/metrics")
+def metrics_endpoint():
+    """In-process operational metrics: request counts by status, geocode/FHIR cache
+    hit rates, and upstream error count. Not under /api/, so it isn't rate-limited."""
+    return metrics.snapshot()
+
+
 @app.get("/api/insurance/plans")
 def insurance_plans():
     """Filterable plans — flat list plus grouped by coverage category. Each plan
@@ -232,6 +265,7 @@ async def api_npi(
     except Exception as e:
         # Keep the user-facing 502 generic, but record what actually failed so a
         # broken upstream (NPPES down, network error) is visible in the logs.
+        metrics.incr("upstream_error")
         log.warning("NPPES search failed (zip=%s city=%s state=%s npi=%s name=%s): %s: %s",
                     zip, city, state, npi, name, type(e).__name__, e)
         raise HTTPException(502, "Could not reach the registry.")
@@ -299,6 +333,7 @@ async def providers_search(
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
+        metrics.incr("upstream_error")
         log.warning("provider search failed (zip=%s city=%s state=%s name=%s): %s: %s",
                     zip, city, state, name, type(e).__name__, e)
         raise HTTPException(502, "Could not reach the registry.")

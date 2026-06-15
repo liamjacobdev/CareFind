@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app import db, main
+from app import db, main, metrics
 
 _GOLDEN = json.loads(
     (Path(__file__).parent / "fixtures" / "normalize_golden.json").read_text(encoding="utf-8")
@@ -72,6 +72,23 @@ def test_frontend_logic_js_served(client):
     assert r.status_code == 200
     assert "javascript" in r.headers["content-type"]
     assert "function buildProviders" in r.text
+
+
+def test_request_id_header_and_metrics(client):
+    """T5.2: every response carries an X-Request-ID, and /metrics reflects request
+    counts, status breakdown, FHIR cache hit rate, and upstream errors."""
+    metrics.reset()
+    r = client.get("/api/insurance/plans")
+    assert r.headers.get("x-request-id")  # correlation id echoed
+
+    # A real search exercises the FHIR cache + geocode paths so the rates populate.
+    client.get("/api/providers/search?zip=32536&geocode=false")
+
+    m = client.get("/metrics").json()
+    assert m["requests_total"] >= 2
+    assert "200" in m["requests_by_status"]
+    assert "geocode_cache" in m and "fhir_cache" in m
+    assert m["upstream_errors"] == 0
 
 
 @pytest.mark.parametrize("path", ["/", "/carefind.logic.js"])

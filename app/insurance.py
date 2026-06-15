@@ -25,7 +25,7 @@ import time
 
 import httpx
 
-from . import db
+from . import db, metrics
 from .catalog import CATEGORY_ORDER, PAYER_CATALOG, category_label
 from .config import settings
 
@@ -200,6 +200,7 @@ class FhirPlanNetSource(InsuranceSource):
         except Exception as e:
             # Degrade to "unknown" (never a fabricated yes), but log which payer/NPI
             # endpoint failed so a down or misconfigured Plan-Net directory is visible.
+            metrics.incr("upstream_error")
             log.warning("FHIR Plan-Net check failed (payer=%s npi=%s url=%s): %s: %s",
                         self.id, npi, url, type(e).__name__, e)
             return None
@@ -229,8 +230,10 @@ class FhirPlanNetSource(InsuranceSource):
                 value_str, fetched_at = row
                 if _fhir_cache_fresh(value_str, fetched_at):
                     out[n] = _FHIR_STR_TO_VALUE.get(value_str)
+                    metrics.incr("fhir_hit")
                     continue
             to_fetch.append(n)
+        metrics.incr("fhir_miss", len(to_fetch))
         if not to_fetch:
             return out
 
