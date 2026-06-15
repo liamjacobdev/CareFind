@@ -48,6 +48,15 @@ def test_plans_grouped(client):
     assert {"medicare", "commercial"} <= cat_ids
 
 
+def test_frontend_logic_js_served(client):
+    """The page loads its pure logic from /carefind.logic.js — the backend must
+    serve it as JavaScript (and it must be the real, extracted module)."""
+    r = client.get("/carefind.logic.js")
+    assert r.status_code == 200
+    assert "javascript" in r.headers["content-type"]
+    assert "function buildProviders" in r.text
+
+
 def test_search_attaches_confidence_shape(client):
     data = client.get("/api/providers/search?zip=32536&geocode=false").json()
     assert data["count"] == 2

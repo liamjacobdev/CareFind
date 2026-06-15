@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # App code + the static frontend and seed data.
 COPY app/ ./app/
-COPY carefind.html payers.example.json sample_medicare.csv ./
+COPY carefind.html carefind.logic.js payers.example.json sample_medicare.csv ./
 
 # The SQLite DB (Medicare index + geocode cache) lives on a mounted volume.
 ENV CAREFIND_DB=/data/carefind.db

@@ -170,11 +170,22 @@ def normalize(r: dict) -> dict:
 _FRONTEND = Path(__file__).resolve().parent.parent / "carefind.html"
 
 
+_FRONTEND_LOGIC = _FRONTEND.parent / "carefind.logic.js"
+
+
 @app.get("/")
 def index():
     if _FRONTEND.exists():
         return FileResponse(_FRONTEND, media_type="text/html")
     raise HTTPException(404, "Frontend (carefind.html) not found next to the app package.")
+
+
+@app.get("/carefind.logic.js")
+def frontend_logic():
+    # The page loads its pure logic from this sibling file (also unit-tested by Vitest).
+    if _FRONTEND_LOGIC.exists():
+        return FileResponse(_FRONTEND_LOGIC, media_type="application/javascript")
+    raise HTTPException(404, "carefind.logic.js not found next to the app package.")
 
 
 @app.get("/healthz")
