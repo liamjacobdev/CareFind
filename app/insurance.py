@@ -34,6 +34,21 @@ log = logging.getLogger("carefind.insurance")
 # Highest-confidence wins when several sources answer for one plan.
 _CONFIDENCE_RANK = {"verified": 2, "estimated": 1}
 
+# FHIR result <-> cache string. A True/False is a definite answer; None is "unknown"
+# (the endpoint errored). These are stored distinctly so a cached "unknown" is never
+# served as a "no" — it maps straight back to None and is re-fetched after a short TTL.
+_FHIR_VALUE_TO_STR = {True: "in_network", False: "not_found", None: "unknown"}
+_FHIR_STR_TO_VALUE = {"in_network": True, "not_found": False, "unknown": None}
+
+
+def _fhir_cache_fresh(value_str: str, fetched_at: float) -> bool:
+    """A cached FHIR row is fresh if its age is under the TTL for its kind — a long
+    TTL for definite answers, a short one for 'unknown' so a recovered endpoint is
+    retried soon instead of staying unknown."""
+    ttl = (settings.fhir_cache_unknown_ttl if value_str == "unknown"
+           else settings.fhir_cache_ttl)
+    return (time.time() - fetched_at) < ttl
+
 # How long a DB-backed source caches its availability. A single request calls
 # plans()/categories()/annotate() (each of which checks every source's
 # availability) several times — without this each call fan-outs into a COUNT(*)
@@ -191,25 +206,53 @@ class FhirPlanNetSource(InsuranceSource):
         return self._in_network(bundle)
 
     async def check(self, npi: str):
-        async with httpx.AsyncClient(timeout=12) as client:
-            return await self._check(client, npi)
+        # Route through the cached batch path so a single lookup is cached too.
+        return (await self.check_many([npi])).get(npi)
 
     async def check_many(self, npis: list) -> dict:
-        """Concurrent, bounded — so N payers x N providers can't serialize into a
-        request timeout. Shares one client and caps in-flight requests."""
+        """Concurrent, bounded, and cached — so N payers x N providers can't serialize
+        into a request timeout, and a warm search makes zero live FHIR calls.
+
+        Fresh cache hits are served from SQLite; only the misses (and stale rows) hit
+        the live endpoint, and their results are persisted. A cached 'unknown' is
+        re-fetched after a short TTL and is never treated as 'not in network'."""
         out = {n: None for n in npis}
         if not npis:
             return out
+
+        # 1) Serve fresh cache hits; collect the rest to fetch live.
+        cached = db.fhir_cache_get_many(self.id, npis)
+        to_fetch = []
+        for n in npis:
+            row = cached.get(str(n))
+            if row is not None:
+                value_str, fetched_at = row
+                if _fhir_cache_fresh(value_str, fetched_at):
+                    out[n] = _FHIR_STR_TO_VALUE.get(value_str)
+                    continue
+            to_fetch.append(n)
+        if not to_fetch:
+            return out
+
+        # 2) Fetch the misses live, bounded-concurrently, then persist every result
+        #    (including 'unknown', so a flapping endpoint isn't hammered every search).
         sem = asyncio.Semaphore(8)
+        fetched = {}
         async with httpx.AsyncClient(timeout=12) as client:
             async def one(n):
                 async with sem:
                     return n, await self._check(client, n)
-            for res in await asyncio.gather(*[one(n) for n in npis], return_exceptions=True):
+            for res in await asyncio.gather(*[one(n) for n in to_fetch], return_exceptions=True):
                 if isinstance(res, Exception):
                     continue
                 n, v = res
                 out[n] = v
+                fetched[n] = v
+        if fetched:
+            now = time.time()
+            db.fhir_cache_set_many(
+                self.id, [(n, _FHIR_VALUE_TO_STR.get(v, "unknown")) for n, v in fetched.items()], now
+            )
         return out
 
 

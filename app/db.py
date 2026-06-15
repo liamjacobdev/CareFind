@@ -62,6 +62,19 @@ def init_db() -> None:
             "  created_at TEXT DEFAULT CURRENT_TIMESTAMP"
             ")"
         )
+        # FHIR Plan-Net result cache, so a search doesn't make a live HTTP call per
+        # payer per provider every time. `value` is one of 'in_network' / 'not_found'
+        # / 'unknown'; the caller maps these to True / False / None and applies a TTL,
+        # so a cached 'unknown' is NEVER served as a 'no'. fetched_at is epoch seconds.
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS fhir_cache ("
+            "  payer TEXT NOT NULL,"
+            "  npi TEXT NOT NULL,"
+            "  value TEXT NOT NULL,"
+            "  fetched_at REAL NOT NULL,"
+            "  PRIMARY KEY (payer, npi)"
+            ")"
+        )
 
 
 # ── Medicare index ──────────────────────────────────────────────────────────
@@ -180,3 +193,60 @@ def revgeocode_set(key: str, postcode: str) -> None:
             "INSERT OR REPLACE INTO revcache (key, postcode) VALUES (?, ?)",
             (key, postcode or ""),
         )
+
+
+# ── FHIR Plan-Net result cache ────────────────────────────────────────────────
+def fhir_cache_get(payer: str, npi: str):
+    """Return (value_str, fetched_at) for a cached FHIR result, or None if absent.
+    Freshness/TTL is the caller's call (it knows the per-state TTLs); this just
+    reads the row."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT value, fetched_at FROM fhir_cache WHERE payer = ? AND npi = ?",
+            (str(payer), str(npi)),
+        ).fetchone()
+        if row is not None:
+            return row["value"], row["fetched_at"]
+    return None
+
+
+def fhir_cache_get_many(payer: str, npis) -> dict:
+    """Batch read: {npi: (value_str, fetched_at)} for the cached subset of `npis`."""
+    out: dict = {}
+    npis = [str(n) for n in npis]
+    if not npis:
+        return out
+    with _conn() as conn:
+        for i in range(0, len(npis), 500):
+            chunk = npis[i:i + 500]
+            placeholders = ",".join("?" * len(chunk))
+            for row in conn.execute(
+                f"SELECT npi, value, fetched_at FROM fhir_cache "
+                f"WHERE payer = ? AND npi IN ({placeholders})",
+                [str(payer), *chunk],
+            ):
+                out[row["npi"]] = (row["value"], row["fetched_at"])
+    return out
+
+
+def fhir_cache_set(payer: str, npi: str, value: str, fetched_at: float) -> None:
+    with _write_lock, _conn() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO fhir_cache (payer, npi, value, fetched_at) "
+            "VALUES (?, ?, ?, ?)",
+            (str(payer), str(npi), value, float(fetched_at)),
+        )
+
+
+def fhir_cache_set_many(payer: str, items, fetched_at: float) -> int:
+    """items: iterable of (npi, value_str). Bulk upsert with one timestamp."""
+    rows = [(str(payer), str(n), v, float(fetched_at)) for n, v in items]
+    if not rows:
+        return 0
+    with _write_lock, _conn() as conn:
+        conn.executemany(
+            "INSERT OR REPLACE INTO fhir_cache (payer, npi, value, fetched_at) "
+            "VALUES (?, ?, ?, ?)",
+            rows,
+        )
+    return len(rows)

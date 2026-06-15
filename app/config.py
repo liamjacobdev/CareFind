@@ -55,6 +55,14 @@ class Settings:
         # Where to find configured commercial payers (see payers.example.json).
         self.payers_file = os.environ.get("CAREFIND_PAYERS", "payers.json")
 
+        # FHIR Plan-Net result cache TTLs (seconds). A definite answer (in-network /
+        # not-found) is stable, so it's cached for a day; an "unknown" (the payer's
+        # endpoint errored/timed out) is cached only briefly so a recovered endpoint
+        # is retried soon rather than pinned as unknown. Never is "unknown" read as a
+        # "no" — see app/insurance.py.
+        self.fhir_cache_ttl = int(os.environ.get("CAREFIND_FHIR_CACHE_TTL", str(24 * 3600)))
+        self.fhir_cache_unknown_ttl = int(os.environ.get("CAREFIND_FHIR_CACHE_UNKNOWN_TTL", "600"))
+
         # Hard ceiling on a single ingest download (TiC / Medicare). Remote files
         # are streamed and aborted the moment they exceed this, so a hostile or
         # mistyped URL can't OOM the box by being read fully into memory. Default

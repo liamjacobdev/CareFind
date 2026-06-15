@@ -4,7 +4,11 @@ import pytest
 import respx
 
 from app import db, insurance
+from app.config import settings
 from app.insurance import EstimatedPayerSource, FhirPlanNetSource, Registry
+
+_IN_NETWORK = {"entry": [{"resource": {"resourceType": "PractitionerRole",
+                                       "active": True, "network": [{"reference": "Organization/x"}]}}]}
 
 
 def _build():
@@ -88,7 +92,7 @@ async def test_estimated_returns_true_or_none_never_false():
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_fhir_check_many_concurrent_mapping():
+async def test_fhir_check_many_concurrent_mapping(temp_db):
     base = "https://payer.example/r4"
     src = FhirPlanNetSource({"id": "demo", "label": "Demo", "base_url": base})
     route = respx.get(f"{base}/PractitionerRole")
@@ -125,3 +129,79 @@ async def test_fhir_upstream_error_degrades_and_logs(temp_db, caplog):
     assert out["1111111111"] is None  # degraded, not fabricated
     assert any("FHIR Plan-Net check failed" in r.message and "demo" in r.message
                for r in caplog.records)
+
+
+# ── T3.1: FHIR Plan-Net result cache ──────────────────────────────────────────
+@respx.mock
+@pytest.mark.asyncio
+async def test_fhir_cache_warm_hit_makes_no_live_calls(temp_db):
+    base = "https://payer.example/r4"
+    route = respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(200, json=_IN_NETWORK))
+    src = FhirPlanNetSource({"id": "demo", "label": "Demo", "base_url": base})
+
+    cold = await src.check_many(["1111111111", "2222222222"])
+    assert route.call_count == 2  # one live call per NPI on the cold miss
+    assert cold == {"1111111111": True, "2222222222": True}
+
+    warm = await src.check_many(["1111111111", "2222222222"])
+    assert route.call_count == 2  # zero additional live calls — served from cache
+    assert warm == cold
+    # The cold result was persisted with a definite value.
+    assert db.fhir_cache_get("demo", "1111111111")[0] == "in_network"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_fhir_cache_partial_hit_fetches_only_misses(temp_db):
+    base = "https://payer.example/r4"
+    route = respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(200, json=_IN_NETWORK))
+    src = FhirPlanNetSource({"id": "demo", "label": "Demo", "base_url": base})
+
+    await src.check_many(["1111111111"])          # warms one NPI
+    assert route.call_count == 1
+    await src.check_many(["1111111111", "3333333333"])  # only the new NPI is live
+    assert route.call_count == 2
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_fhir_cache_unknown_never_served_as_no(temp_db, monkeypatch):
+    """An endpoint error is cached as 'unknown' and must map back to None — never to
+    False (not-in-network). A fresh 'unknown' is served from cache without re-hitting."""
+    monkeypatch.setattr(settings, "fhir_cache_unknown_ttl", 600)
+    base = "https://payer.example/r4"
+    route = respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(503))
+    src = FhirPlanNetSource({"id": "demo", "label": "Demo", "base_url": base})
+
+    assert (await src.check_many(["1111111111"]))["1111111111"] is None
+    assert db.fhir_cache_get("demo", "1111111111")[0] == "unknown"
+    # Warm read within the unknown TTL: still None (not False), no extra live call.
+    assert (await src.check_many(["1111111111"]))["1111111111"] is None
+    assert route.call_count == 1
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_fhir_cache_stale_unknown_refetches_and_recovers(temp_db, monkeypatch):
+    monkeypatch.setattr(settings, "fhir_cache_unknown_ttl", 0)  # 'unknown' always stale
+    base = "https://payer.example/r4"
+    route = respx.get(f"{base}/PractitionerRole")
+    src = FhirPlanNetSource({"id": "demo", "label": "Demo", "base_url": base})
+
+    route.mock(return_value=httpx.Response(503))
+    assert (await src.check_many(["1111111111"]))["1111111111"] is None  # unknown
+    route.mock(return_value=httpx.Response(200, json=_IN_NETWORK))       # endpoint recovers
+    assert (await src.check_many(["1111111111"]))["1111111111"] is True  # re-fetched, not stuck
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_fhir_cache_stale_definite_refetches(temp_db, monkeypatch):
+    monkeypatch.setattr(settings, "fhir_cache_ttl", 0)  # definite answers always stale
+    base = "https://payer.example/r4"
+    route = respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(200, json=_IN_NETWORK))
+    src = FhirPlanNetSource({"id": "demo", "label": "Demo", "base_url": base})
+
+    await src.check_many(["1111111111"])
+    await src.check_many(["1111111111"])
+    assert route.call_count == 2  # stale definite entry was re-fetched, not served
