@@ -36,3 +36,9 @@ jobs:
 
       - name: Run unit tests (with coverage threshold)
         run: npm test
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e smoke
+        run: npm run test:e2e
