@@ -18,6 +18,7 @@ const PLANS = { plans: [MED, AETNA], categories: [
 
 test('estimated payers are hidden until "Include estimated" is toggled', async ({ page }) => {
   await page.route('**/api/**', (r) => r.fulfill({ json: {} }));
+  await page.route('**/healthz', (r) => r.fulfill({ json: { ok: true } }));
   await page.route('**/api/insurance/plans', (r) => r.fulfill({ json: PLANS }));
   await page.goto(PAGE);
 

@@ -627,6 +627,7 @@ const state = {
   providers:[], favorites:{}, activeNpi:null, activeTab:'results',
   center:null, centerLabel:'', searching:false, token:0, sort:'relevance', geocache:{},
   plans:[], categories:[], selectedPlans:[], insMode:'verified', radius:0,
+  backendReachable:null,
 };
 let mapInstance=null, mapMarkers={}, centerMarker=null, markerClusterLayer=null;
 
@@ -640,8 +641,8 @@ function npiCandidates(params){
   if (HAS_BACKEND) list.push(API_BASE + '/api/npi?' + qs);   // your backend: cached, private
   if (SERVED) list.push(SAME_ORIGIN + '/api/npi?' + qs);     // hosted: same origin, no CORS, cached
   list.push('http://localhost:8787/api/npi?' + qs);          // local helper if running
-  list.push(NPI_API + '?' + qs);                             // NPPES directly (sends CORS headers)
-  if (ALLOW_PUBLIC_PROXIES){                                 // opt-in only — see privacy note above
+  list.push(NPI_API + '?' + qs);                             // NPPES directly — note: it does NOT send CORS headers, so this only succeeds server-side, not from a browser
+  if (ALLOW_PUBLIC_PROXIES){                                 // opt-in only — the real standalone path; see privacy note above
     list.push('https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(full));
     list.push('https://api.allorigins.win/raw?url=' + encodeURIComponent(full));
     list.push('https://corsproxy.io/?url=' + encodeURIComponent(full));
@@ -847,11 +848,9 @@ async function handleSearch(){
 
     if(HAS_BACKEND){
       // One call: NPPES + real insurance flags + server-side batched geocoding.
-      // If the backend is simply not running, fall through to the direct-registry
-      // path below so the page still works (a 400 = real bad query, surfaced).
-      let result=null;
+      let result=null, backendUnreachable=false;
       try { result=await backendSearch(f); }
-      catch(err){ if(!(err && err.unreachable)) throw err; noteBackendFallback(); }
+      catch(err){ if(!(err && err.unreachable)) throw err; backendUnreachable=true; }
       if(result!==null){
         if(token!==state.token) return;
         const providers=result.providers;
@@ -862,12 +861,17 @@ async function handleSearch(){
         if(mapInstance) plotMarkers();   // coords are already attached — pins now, no wait
         document.getElementById('results-count-header').textContent=`${providers.length} provider${providers.length!==1?'s':''} found`;
         finishSearch();
-        // The backend is authoritative for coordinates + the radius boundary, so we
-        // do NOT re-geocode here (that was the old ~27s serial lag). The standalone
-        // (no-backend) path below still geocodes client-side.
         return;
       }
-      // else: backend unreachable — continue to the standalone registry search.
+      // Backend unreachable. The CMS registry does NOT allow direct browser calls
+      // (CORS-blocked), so the only standalone path that actually works is the
+      // opt-in public-proxy route. Without it, don't pretend to search — tell the
+      // user plainly to start the backend rather than failing cryptically.
+      if(backendUnreachable && !ALLOW_PUBLIC_PROXIES){
+        if(token!==state.token) return;
+        showBackendRequired(); finishSearch(); return;
+      }
+      if(backendUnreachable) noteBackendFallback();
     }
 
     const results=await fetchNpi(buildNpiParams(f));
@@ -931,10 +935,27 @@ async function backendSearch(f){
 // because the optional CareFind backend isn't running.
 let _backendFallbackNoted=false;
 function noteBackendFallback(){
+  // Only reached when ALLOW_PUBLIC_PROXIES is on — the one standalone path that
+  // actually reaches the registry from a browser. (Without it, the search shows the
+  // honest "start the backend" state instead of this.)
   if(_backendFallbackNoted) return;
   _backendFallbackNoted=true;
-  console.info('CareFind backend not reachable — using the official CMS registry directly.');
-  showToast('Backend offline — searching the official registry directly');
+  console.info('CareFind backend not reachable — routing through the opt-in public CORS proxy.');
+  showToast('Backend offline — using the public CORS proxy');
+}
+
+// Probe the backend once on load so we can tell the user upfront (not just on search)
+// when provider search won't work because the backend isn't running.
+async function probeBackend(){
+  if(!HAS_BACKEND){ state.backendReachable=false; }
+  else {
+    try { state.backendReachable=(await fetch(`${API_BASE}/healthz`,{signal:AbortSignal.timeout(4000)})).ok; }
+    catch(_){ state.backendReachable=false; }
+  }
+  if(state.backendReachable===false && !ALLOW_PUBLIC_PROXIES
+     && state.activeTab==='results' && !state.providers.length && !state.searching){
+    showBackendRequired();
+  }
 }
 
 // adaptBackendProvider() now lives in carefind.logic.js (called with state.center).
@@ -1254,6 +1275,19 @@ function showErrorState(msg){
     <p class="state-title">Couldn't reach the registry</p>
     <p class="state-text err">${esc(msg)}</p>
     <button class="state-retry" data-action="search">Try again</button></div>`;
+  document.getElementById('results-count-header').textContent='';
+  updateResultsBar();
+}
+// Honest state when the backend isn't running and there's no working standalone path
+// (the CMS registry can't be called directly from a browser). Tell the user exactly
+// what to do instead of advertising a search that can't run.
+function showBackendRequired(){
+  const list=document.getElementById('results-list'); list.classList.remove('cards');
+  list.innerHTML=`<div class="state-block"><svg class="state-art" width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#b3402f" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 20h10M9 16v4M15 16v4"/></svg>
+    <p class="state-title">Start the CareFind backend</p>
+    <p class="state-text">Provider search runs through the CareFind backend — the public CMS registry can't be queried directly from a browser. Start it and reload:</p>
+    <p class="state-text" style="font-family:ui-monospace,Menlo,monospace;background:var(--card,#f4f6f5);padding:8px 12px;border-radius:8px;">uvicorn app.main:app --port 8000</p>
+    <p class="state-text">then open <b>http://localhost:8000</b>. <button class="state-retry" data-action="search" style="margin-top:8px;">Try again</button></p></div>`;
   document.getElementById('results-count-header').textContent='';
   updateResultsBar();
 }
@@ -1643,8 +1677,10 @@ async function bootstrap(){
   if(leafletOk) initMap();
   if(!mapInstance) showMapUnavailable();
 
-  // hydrate from a shared URL and auto-run
+  // hydrate from a shared URL and auto-run; otherwise probe the backend so we can
+  // flag upfront when search won't work because it isn't running.
   if(readUrl()) handleSearch();
+  else probeBackend();
 }
 document.addEventListener('DOMContentLoaded',bootstrap);
 </script>

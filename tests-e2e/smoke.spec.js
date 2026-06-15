@@ -27,6 +27,7 @@ const SEARCH = {
 test('search → drawer → save → Saved tab → export CSV', async ({ page }) => {
   // Catch-all first so the specific routes (registered after) take precedence.
   await page.route('**/api/**', (r) => r.fulfill({ json: {} }));
+  await page.route('**/healthz', (r) => r.fulfill({ json: { ok: true } }));  // backend "reachable"
   await page.route('**/api/insurance/plans', (r) => r.fulfill({ json: PLANS }));
   await page.route('**/api/providers/search**', (r) => r.fulfill({ json: SEARCH }));
 
