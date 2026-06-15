@@ -42,6 +42,29 @@ async def test_medicare_verified_true_false(temp_db):
 
 
 @pytest.mark.asyncio
+async def test_regional_payer_state_scoped_and_graduates_when_wired(temp_db, monkeypatch):
+    """The live-validated regional payers are state-scoped estimates by default
+    (Premera only WA/AK), and graduate to verified when their FHIR endpoint is wired
+    — proving the catalog id is the stable join key (no UI change needed)."""
+    # Estimated, correctly scoped: WA gets a "likely", a non-served state gets nothing.
+    reg = _build()
+    ann = await reg.annotate(
+        [{"npi": "1", "stateAb": "WA"}, {"npi": "2", "stateAb": "FL"}], only=["premera_bcbs"])
+    assert ann["1"]["premera_bcbs"]["confidence"] == "estimated"
+    assert "premera_bcbs" not in ann["2"]  # not offered outside WA/AK
+
+    # Wire its FHIR endpoint -> same id now answers verified, superseding the estimate.
+    base = "https://opala.example/r4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [
+        {"id": "premera_bcbs", "label": "Premera", "base_url": base, "category": "commercial"}])
+    with respx.mock:
+        respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(200, json=_IN_NETWORK))
+        reg2 = Registry(); reg2.build()
+        ann2 = await reg2.annotate([{"npi": "1", "stateAb": "WA"}], only=["premera_bcbs"])
+    assert ann2["1"]["premera_bcbs"] == {"value": True, "confidence": "verified", "source": "premera_bcbs"}
+
+
+@pytest.mark.asyncio
 async def test_estimated_regional_gating(temp_db):
     reg = _build()
     ann = await reg.annotate(

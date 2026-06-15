@@ -52,6 +52,16 @@ PAYER_CATALOG = [
     {"id": "molina", "label": "Molina Healthcare", "category": "commercial", "states": None},
     {"id": "oscar", "label": "Oscar Health", "category": "commercial", "states": None},
 
+    # ── Regional payers with live-validated public FHIR Plan-Net directories ──
+    # State-scoped to exactly where they operate (NOT national — Premera is a WA/AK
+    # BCBS licensee, not Blue Cross nationally). Estimated by default; they graduate
+    # to a verified green filter automatically when wired in payers.json (the ids
+    # match payers.example.json). See the README's validated-endpoints table.
+    {"id": "premera_bcbs", "label": "Premera Blue Cross (WA/AK)", "category": "commercial", "states": ["WA", "AK"]},
+
+    # ── Medicaid managed-care (regional) ──
+    {"id": "priority_partners", "label": "Priority Partners (MD Medicaid)", "category": "medicaid", "states": ["MD"]},
+
     # ── Medicare Advantage (national carriers that sell MA plans) ──
     {"id": "uhc_ma", "label": "UnitedHealthcare (Medicare Advantage)", "category": "medicare_advantage", "states": None},
     {"id": "humana_ma", "label": "Humana (Medicare Advantage)", "category": "medicare_advantage", "states": None},
