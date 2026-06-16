@@ -284,3 +284,55 @@ def source_meta_get(source_id: str):
         if row is not None:
             return row["source_url"] or "", row["fetched_at"]
     return None
+
+
+# ── Datastore seam ────────────────────────────────────────────────────────────
+# The module functions above ARE the SQLite implementation. SqliteDatastore wraps
+# them as an object satisfying the Datastore protocol (app/interfaces.py), so a future
+# multi-worker backend (e.g. Postgres, D4) is a config swap rather than a rewrite. The
+# module-level functions remain the default call path; new code that needs to honor
+# the swap goes through get_datastore().
+class SqliteDatastore:
+    """The default $0 datastore: SQLite via the module functions in this file."""
+
+    init_db = staticmethod(init_db)
+    medicare_count = staticmethod(medicare_count)
+    medicare_has = staticmethod(medicare_has)
+    medicare_has_many = staticmethod(medicare_has_many)
+    medicare_add_many = staticmethod(medicare_add_many)
+    tic_count = staticmethod(tic_count)
+    tic_has = staticmethod(tic_has)
+    tic_has_many = staticmethod(tic_has_many)
+    tic_add_many = staticmethod(tic_add_many)
+    geocode_get = staticmethod(geocode_get)
+    geocode_set = staticmethod(geocode_set)
+    revgeocode_get = staticmethod(revgeocode_get)
+    revgeocode_set = staticmethod(revgeocode_set)
+    fhir_cache_get = staticmethod(fhir_cache_get)
+    fhir_cache_get_many = staticmethod(fhir_cache_get_many)
+    fhir_cache_set = staticmethod(fhir_cache_set)
+    fhir_cache_set_many = staticmethod(fhir_cache_set_many)
+    source_meta_set = staticmethod(source_meta_set)
+    source_meta_get = staticmethod(source_meta_get)
+
+
+def build_datastore():
+    """Select the datastore from config. Defaults to SQLite (the only $0 option today;
+    a Postgres impl satisfying the Datastore protocol slots in here for D4)."""
+    # settings.datastore is validated to a known value; unknown -> SQLite default.
+    return SqliteDatastore()
+
+
+_active = build_datastore()
+
+
+def get_datastore():
+    """The active datastore. Swappable via use_datastore() (e.g. in tests or D4)."""
+    return _active
+
+
+def use_datastore(ds) -> None:
+    """Swap the active datastore. The default SQLite impl is restored with
+    use_datastore(build_datastore())."""
+    global _active
+    _active = ds

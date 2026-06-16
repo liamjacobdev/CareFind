@@ -3,7 +3,6 @@ real insurance acceptance. Deploy behind TLS on your own domain (see README)."""
 import logging
 import time
 import uuid
-from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -15,6 +14,7 @@ from pydantic import BaseModel
 from . import db, geocode, metrics, nppes
 from .config import settings
 from .insurance import registry
+from .ratelimit import build_rate_limiter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,12 +49,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CareFind API", version="3.1", lifespan=lifespan)
 
-# ── Per-client rate limiting (fixed window, in-process) ──────────────────────
-# Stops this open proxy from being driven to hammer NPPES/Nominatim. Per-worker;
-# run a single worker (or front with a shared limiter) for a hard global cap.
-# Registered before CORS below so CORS stays outermost and 429s carry CORS headers.
-_hits: dict = defaultdict(deque)
-_last_sweep = 0.0
+# ── Per-client rate limiting ─────────────────────────────────────────────────
+# Stops this open proxy from being driven to hammer NPPES/Nominatim. Behind the
+# RateLimiter seam (app/interfaces.py): in-process per-worker by default; swap a
+# shared backend (e.g. Redis) for a hard global cap across workers (D4) by setting
+# CAREFIND_RATE_LIMITER. Registered before CORS below so CORS stays outermost and
+# 429s carry CORS headers.
+_limiter = build_rate_limiter()
 
 
 def _client_ip(request: Request) -> str:
@@ -73,28 +74,15 @@ def _client_ip(request: Request) -> str:
 
 @app.middleware("http")
 async def rate_limit(request: Request, call_next):
-    global _last_sweep
-    if settings.rate_limit_max and request.url.path.startswith("/api/"):
+    if request.url.path.startswith("/api/"):
         ip = _client_ip(request)
-        now = time.monotonic()
-        window = settings.rate_limit_window
-        # Bound memory: periodically evict buckets gone idle past the window so
-        # _hits can't grow unbounded across many distinct client IPs (a bucket whose
-        # owner never returns would otherwise linger forever).
-        if now - _last_sweep > window:
-            for stale in [k for k, d in _hits.items() if not d or now - d[-1] > window]:
-                del _hits[stale]
-            _last_sweep = now
-        dq = _hits[ip]
-        while dq and now - dq[0] > window:
-            dq.popleft()
-        if len(dq) >= settings.rate_limit_max:
+        decision = _limiter.check(ip)
+        if not decision.allowed:
             log.warning("rate limit hit for %s on %s", ip, request.url.path)
             return JSONResponse(
                 {"detail": "Too many requests — slow down and try again shortly."},
-                status_code=429, headers={"Retry-After": str(window)},
+                status_code=429, headers={"Retry-After": str(decision.retry_after)},
             )
-        dq.append(now)
     return await call_next(request)
 
 

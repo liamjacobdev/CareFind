@@ -106,6 +106,14 @@ class Settings:
             "1", "true", "yes", "on",
         )
 
+        # Scale-readiness seams (see app/interfaces.py). Each external dependency sits
+        # behind a Protocol so scaling is a config swap, not a rewrite. Defaults are the
+        # $0 self-hosted implementations; alternates (e.g. Redis, Postgres) are wired in
+        # D4 and selected here without touching call sites.
+        self.datastore = os.environ.get("CAREFIND_DATASTORE", "sqlite").strip().lower()
+        self.rate_limiter = os.environ.get("CAREFIND_RATE_LIMITER", "memory").strip().lower()
+        self.cache_backend = os.environ.get("CAREFIND_CACHE", "memory").strip().lower()
+
     def load_payers(self) -> list:
         """Read payers.json -> list of payer config dicts. Missing file is fine."""
         path = Path(self.payers_file)

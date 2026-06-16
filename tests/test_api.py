@@ -209,7 +209,7 @@ def test_rate_limit_is_per_client_behind_proxy(client, monkeypatch):
     monkeypatch.setattr(main.settings, "trust_proxy", True)
     monkeypatch.setattr(main.settings, "rate_limit_max", 3)
     monkeypatch.setattr(main.settings, "rate_limit_window", 60)
-    main._hits.clear()
+    main._limiter.reset()
     h1 = {"X-Forwarded-For": "1.1.1.1"}
     h2 = {"X-Forwarded-For": "2.2.2.2"}
     for _ in range(3):
@@ -219,22 +219,14 @@ def test_rate_limit_is_per_client_behind_proxy(client, monkeypatch):
     assert client.get("/api/insurance/plans", headers=h2).status_code == 200
 
 
-def test_rate_limit_evicts_idle_buckets(client, monkeypatch):
-    """Idle buckets are swept so _hits can't grow unbounded across distinct IPs."""
-    clock = {"t": 1000.0}
-    monkeypatch.setattr(main.time, "monotonic", lambda: clock["t"])
-    monkeypatch.setattr(main.settings, "trust_proxy", True)
-    monkeypatch.setattr(main.settings, "rate_limit_max", 5)
-    monkeypatch.setattr(main.settings, "rate_limit_window", 60)
-    monkeypatch.setattr(main, "_last_sweep", 0.0)
-    main._hits.clear()
-
-    client.get("/api/insurance/plans", headers={"X-Forwarded-For": "9.9.9.9"})
-    assert "9.9.9.9" in main._hits
-    clock["t"] += 200  # idle well past the window
-    client.get("/api/insurance/plans", headers={"X-Forwarded-For": "8.8.8.8"})
-    assert "9.9.9.9" not in main._hits  # swept on the next request
-    assert "8.8.8.8" in main._hits
+def test_noop_rate_limiter_swap_disables_limiting(client, monkeypatch):
+    """The RateLimiter is a swappable seam: dropping in a no-op limiter removes the
+    429 even past the configured max — proving the limiter is injected, not baked in."""
+    from app.ratelimit import NoopRateLimiter
+    monkeypatch.setattr(main.settings, "rate_limit_max", 1)
+    monkeypatch.setattr(main, "_limiter", NoopRateLimiter())
+    for _ in range(5):
+        assert client.get("/api/insurance/plans").status_code == 200
 
 
 def test_geocode_batch_rejects_oversized(client):
