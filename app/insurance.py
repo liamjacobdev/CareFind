@@ -171,22 +171,62 @@ class FhirPlanNetSource(InsuranceSource):
         return h
 
     @staticmethod
-    def _in_network(bundle: dict) -> bool:
-        """An active PractitionerRole with a network reference = in-network."""
+    def _has_network_link(res: dict) -> bool:
+        """True only if this PractitionerRole carries a *resolvable network reference*.
+
+        In FHIR Plan-Net a provider's participation is asserted by linking the role to
+        a `Network` resource (the `network` field, or a Plan-Net `network-reference`
+        extension carrying a `valueReference`). `healthcareService` is NOT a network
+        link — a provider can offer services without being in any network — so it is
+        deliberately excluded. Absent a real network reference we cannot confirm
+        in-network status, only directory presence.
+        """
+        for ref in res.get("network", []) or []:
+            if isinstance(ref, dict) and ref.get("reference"):
+                return True
+        for ext in res.get("extension", []) or []:
+            if not isinstance(ext, dict):
+                continue
+            if "network" in (ext.get("url", "") or "").lower():
+                vr = ext.get("valueReference")
+                if isinstance(vr, dict) and vr.get("reference"):
+                    return True
+        return False
+
+    @classmethod
+    def _in_network(cls, bundle: dict, strictness: str | None = None):
+        """Map a PractitionerRole Bundle to True / False / None (unknown).
+
+        Trust invariant: directory *presence* alone never becomes a Confirmed "yes".
+
+          • True  — an active PractitionerRole with a resolvable network link (or, in
+                    "directory" strictness, any active PractitionerRole).
+          • None  — the provider is *listed* (≥1 PractitionerRole) but no active role
+                    carries a network link: we can't confirm the network, so "unknown".
+          • False — the provider is not in this payer's directory at all (no role).
+
+        `active: false` roles are never treated as a yes; a bundle of only-inactive
+        roles is therefore "listed but unconfirmable" → None, not False.
+        """
+        strictness = strictness or settings.fhir_strictness
         entries = bundle.get("entry", []) if isinstance(bundle, dict) else []
+        saw_role = False
+        saw_active = False
         for e in entries:
             res = e.get("resource", {})
             if res.get("resourceType") != "PractitionerRole":
                 continue
+            saw_role = True
             if res.get("active") is False:
                 continue
-            has_network = any(
-                "network" in (ext.get("url", "").lower())
-                for ext in res.get("extension", [])
-            ) or bool(res.get("network")) or bool(res.get("healthcareService"))
-            if has_network:
+            saw_active = True
+            if cls._has_network_link(res):
                 return True
-        return False
+        if strictness == "directory" and saw_active:
+            return True
+        if saw_role:
+            return None  # listed, but presence alone can't confirm in-network
+        return False  # not in the directory at all
 
     async def _check(self, client: httpx.AsyncClient, npi: str):
         url = f"{self.base}/PractitionerRole"

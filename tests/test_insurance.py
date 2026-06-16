@@ -113,6 +113,59 @@ async def test_estimated_returns_true_or_none_never_false():
     assert (await regional.check_many_ctx({"1": {"state": "TX"}}))["1"] is None  # never False
 
 
+# ── A1: presence-only must never become a Confirmed yes ───────────────────────
+def _role(active=True, network=True, healthcare=False):
+    res = {"resourceType": "PractitionerRole"}
+    if active is not None:
+        res["active"] = active
+    if network:
+        res["network"] = [{"reference": "Network/abc"}]
+    if healthcare:
+        res["healthcareService"] = [{"reference": "HealthcareService/x"}]
+    return {"entry": [{"resource": res}]}
+
+
+def test_in_network_active_with_network_is_true():
+    assert FhirPlanNetSource._in_network(_role(active=True, network=True)) is True
+    # A Plan-Net network-reference extension also counts as a resolvable link.
+    ext_bundle = {"entry": [{"resource": {
+        "resourceType": "PractitionerRole", "active": True,
+        "extension": [{"url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference",
+                       "valueReference": {"reference": "Network/abc"}}]}}]}
+    assert FhirPlanNetSource._in_network(ext_bundle) is True
+
+
+def test_in_network_presence_only_is_unknown_not_true():
+    """Listed (active role) but no resolvable network link → None, never True."""
+    assert FhirPlanNetSource._in_network(_role(active=True, network=False)) is None
+    # healthcareService is NOT a network link — presence of it alone is still unknown.
+    assert FhirPlanNetSource._in_network(
+        _role(active=True, network=False, healthcare=True)) is None
+
+
+def test_in_network_inactive_only_is_never_true():
+    """An only-inactive listing is listed-but-unconfirmable (None), never True/False yes."""
+    assert FhirPlanNetSource._in_network(_role(active=False, network=True)) is None
+    assert FhirPlanNetSource._in_network(_role(active=False, network=False)) is None
+
+
+def test_in_network_not_listed_is_false():
+    assert FhirPlanNetSource._in_network({"entry": []}) is False
+    assert FhirPlanNetSource._in_network({}) is False
+
+
+def test_in_network_strictness_flag_toggles_presence_only():
+    """The strictness flag flips presence-only between unknown (network) and yes
+    (directory). The default is the trust-preserving 'network'."""
+    presence_only = _role(active=True, network=False)
+    assert FhirPlanNetSource._in_network(presence_only, strictness="network") is None
+    assert FhirPlanNetSource._in_network(presence_only, strictness="directory") is True
+    # 'directory' still never turns a not-listed or inactive-only bundle into True.
+    assert FhirPlanNetSource._in_network({"entry": []}, strictness="directory") is False
+    assert FhirPlanNetSource._in_network(
+        _role(active=False, network=False), strictness="directory") is None
+
+
 @respx.mock
 @pytest.mark.asyncio
 async def test_fhir_check_many_concurrent_mapping(temp_db):

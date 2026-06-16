@@ -68,6 +68,20 @@ class Settings:
         self.fhir_cache_ttl = int(os.environ.get("CAREFIND_FHIR_CACHE_TTL", str(24 * 3600)))
         self.fhir_cache_unknown_ttl = int(os.environ.get("CAREFIND_FHIR_CACHE_UNKNOWN_TTL", "600"))
 
+        # How strict the FHIR Plan-Net "in-network" determination is.
+        #   "network"  (default) — a Confirmed answer requires an *active*
+        #       PractitionerRole that links to a network. A role that is listed but
+        #       carries no resolvable network reference is "unknown" (None), never a
+        #       fabricated yes. This is the trust-preserving default.
+        #   "directory" — looser: an active PractitionerRole counts as in-network even
+        #       without a network link (directory presence). Opt-in only, for payers
+        #       whose published directory is known not to populate network references.
+        self.fhir_strictness = os.environ.get(
+            "CAREFIND_FHIR_STRICTNESS", "network"
+        ).strip().lower()
+        if self.fhir_strictness not in ("network", "directory"):
+            self.fhir_strictness = "network"
+
         # Hard ceiling on a single ingest download (TiC / Medicare). Remote files
         # are streamed and aborted the moment they exceed this, so a hostile or
         # mistyped URL can't OOM the box by being read fully into memory. Default
