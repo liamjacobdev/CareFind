@@ -34,6 +34,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build frontend bundle
+        run: npm run build
+
+      - name: Verify committed bundle matches src/ (reproducible build)
+        run: git diff --exit-code carefind.bundle.js
+
       - name: Run unit tests (with coverage threshold)
         run: npm test
 

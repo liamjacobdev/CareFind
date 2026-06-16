@@ -1,15 +1,15 @@
 """Point carefind.html at your deployed API in one step.
 
 Editing the frontend for production means changing two places that must agree:
-  1. const API_BASE   — where the page sends requests
-  2. the CSP connect-src — which origins the browser is allowed to reach
+  1. CAREFIND_CONFIG.apiBase — where the page sends requests
+  2. the CSP connect-src     — which origins the browser is allowed to reach
 
 This script sets both from a single argument, so they never drift.
 
-A third value, CLAIM_EMAIL (the "claim your listing" inbox), must also be set for
-the provider-claim affordances to appear at all — the page hides them while it
-still holds the placeholder. Set it here from --claim-email or $CAREFIND_CLAIM_EMAIL
-so it can't drift either.
+A third value, CAREFIND_CONFIG.claimEmail (the "claim your listing" inbox), must
+also be set for the provider-claim affordances to appear at all — the page hides
+them while it still holds the placeholder. Set it here from --claim-email or
+$CAREFIND_CLAIM_EMAIL so it can't drift either.
 
 Usage:
     python configure_frontend.py https://api.yourdomain.com
@@ -44,22 +44,23 @@ def configure(api_base: str, out: Path, allow_public_proxies: bool = False,
     api_base = api_base.rstrip("/")
     html = SRC.read_text(encoding="utf-8")
 
-    # 0) CLAIM_EMAIL — rewrite the constant so it never drifts from API_BASE/CSP.
-    # Only when a real address is supplied; otherwise leave the placeholder in
-    # place (the page hides claim affordances while it's the placeholder).
+    # These live in the injected `window.CAREFIND_CONFIG` block in carefind.html, so
+    # the page carries no inline business logic. We rewrite the object's fields.
+
+    # 0) claimEmail — only when a real address is supplied; otherwise leave the
+    # placeholder (the page hides claim affordances while it's the placeholder).
     if claim_email:
-        new = re.sub(r"(?m)^const CLAIM_EMAIL\s*=\s*'[^']*';",
-                     f"const CLAIM_EMAIL   = '{claim_email}';", html, count=1)
+        new = re.sub(r"claimEmail:\s*'[^']*'",
+                     f"claimEmail: '{claim_email}'", html, count=1)
         if new == html:
-            raise SystemExit("Could not find the CLAIM_EMAIL declaration to update.")
+            raise SystemExit("Could not find the claimEmail config field to update.")
         html = new
 
-    # 1) API_BASE — anchor to the real declaration at the start of a line, not the
-    # "// e.g. const API_BASE = ..." comment above it.
-    new = re.sub(r"(?m)^const API_BASE\s*=\s*'[^']*';",
-                 f"const API_BASE      = '{api_base}';", html, count=1)
+    # 1) apiBase — where the page sends requests.
+    new = re.sub(r"apiBase:\s*'[^']*'",
+                 f"apiBase: '{api_base}'", html, count=1)
     if new == html:
-        raise SystemExit("Could not find the API_BASE declaration to update.")
+        raise SystemExit("Could not find the apiBase config field to update.")
     html = new
 
     # 2) CSP connect-src: drop the localhost dev origins, add the real API origin.
@@ -83,8 +84,8 @@ def configure(api_base: str, out: Path, allow_public_proxies: bool = False,
     # Keep the JS opt-in flag in lockstep with the CSP so enabling proxies actually
     # works (the page won't reach an origin the CSP forbids, and vice-versa).
     if allow_public_proxies:
-        html = re.sub(r"(?m)^const ALLOW_PUBLIC_PROXIES\s*=\s*false;",
-                      "const ALLOW_PUBLIC_PROXIES = true;", html, count=1)
+        html = re.sub(r"allowPublicProxies:\s*false",
+                      "allowPublicProxies: true", html, count=1)
 
     out.write_text(html, encoding="utf-8")
     proxies = " (public CORS proxies enabled)" if allow_public_proxies else ""

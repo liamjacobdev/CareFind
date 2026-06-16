@@ -1,19 +1,11 @@
-/* CareFind — pure presentation/transform logic, extracted from carefind.html so it
- * can be unit-tested in Node (Vitest) without a browser. This is the SINGLE source
- * of truth for these functions; carefind.html loads this file and uses them as
- * globals (no duplicated definitions to drift).
- *
- * UMD wrapper: in Node it's `module.exports`; in the browser it attaches the same
- * names to `window` as plain globals — so a classic <script src> works (and still
- * loads over file://, unlike an ES module). Keep everything here PURE: no DOM, no
+/* CareFind — pure presentation/transform logic. The SINGLE source of truth for these
+ * functions, imported both by the Vitest unit tests and by src/main.js (which esbuild
+ * bundles into carefind.bundle.js for the page). Keep everything here PURE: no DOM, no
  * `state`, no network. Anything needing page state takes it as an argument.
+ *
+ * Native ES module: named exports for direct use, plus a default object so existing
+ * `import logic from '...'` call sites keep working.
  */
-(function (root, factory) {
-  const api = factory();
-  if (typeof module === 'object' && module.exports) module.exports = api;   // Node / Vitest
-  else Object.assign(root, api);                                            // browser globals
-})(typeof self !== 'undefined' ? self : this, function () {
-  'use strict';
 
   // Specialty label -> NPPES taxonomy_description (real taxonomy text).
   const TAXONOMY_MAP = {
@@ -157,7 +149,9 @@
     return d.toLocaleDateString('en-US',{timeZone:'UTC',year:'numeric',month:'short',day:'numeric'});
   }
 
-  return { TAXONOMY_MAP, PALETTE, toTitleCase, formatPhone, hashStr, haversine,
-           cssEsc, esc, buildNpiParams, buildProviders, adaptBackendProvider,
-           coverageStatus, fmtDate };
-});
+export { TAXONOMY_MAP, PALETTE, toTitleCase, formatPhone, hashStr, haversine,
+         cssEsc, esc, buildNpiParams, buildProviders, adaptBackendProvider,
+         coverageStatus, fmtDate };
+export default { TAXONOMY_MAP, PALETTE, toTitleCase, formatPhone, hashStr, haversine,
+                 cssEsc, esc, buildNpiParams, buildProviders, adaptBackendProvider,
+                 coverageStatus, fmtDate };

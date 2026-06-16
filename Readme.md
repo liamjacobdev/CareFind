@@ -171,13 +171,19 @@ pip install -r requirements-dev.txt
 pytest          # NPPES params, DB/indexes, insurance confidence model, geocoder chain, API end-to-end
 
 npm install
+npm run build   # esbuild: bundle src/ -> carefind.bundle.js (the page loads this)
 npm test        # Vitest unit tests for carefind.logic.js (enforces coverage threshold)
 npm run test:e2e   # Playwright smoke (run `npx playwright install chromium` once first)
 ```
-The frontend's pure logic lives in `carefind.logic.js` (the single source the page and
-the tests share); `tests/fixtures/normalize_golden.json` is asserted by both Python and
-JS so the `normalize()` ↔ `buildProviders()` contract can't drift. CI runs all three
-suites on every push.
+The frontend is authored as ES modules under `src/` (`config.js` reads the injected
+`window.CAREFIND_CONFIG`; `main.js` is the app) plus the pure, unit-tested
+`carefind.logic.js`. `npm run build` bundles them into a single same-origin
+`carefind.bundle.js` — so the deploy story stays "one HTML file + the bundle + a
+backend", the page carries no inline business logic, and the build is reproducible
+(CI rebuilds and fails on any diff). Edit `src/` and rebuild; never hand-edit the
+bundle. `tests/fixtures/normalize_golden.json` is asserted by both Python and JS so
+the `normalize()` ↔ `buildProviders()` contract can't drift. CI runs all suites on
+every push.
 
 ## What was tested vs. what needs your network
 Verified here with an automated suite: app boots, DB/ingest (Medicare + TiC), the insurance confidence model (verified vs estimated, regional gating, verified-supersedes-estimate, post-startup TiC ingest with no restart), FHIR `check_many` mapping (mocked), the geocoder source chain (Census primary, Nominatim fallback, SQLite cache — mocked), NPPES param building incl. radius widening, per-client rate limiting behind a proxy, the batch-geocode cap, the `normalize()` golden shape, and server-authoritative radius search (out-of-radius dropped, distance-sorted, closest survive truncation) end-to-end against a mocked registry. **Not** reachable from the build sandbox, so verify in your environment: live NPPES results, live geocoding, and each payer's FHIR endpoint. The code paths and error handling for those are in place.

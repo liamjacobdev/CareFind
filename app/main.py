@@ -197,6 +197,7 @@ _FRONTEND = Path(__file__).resolve().parent.parent / "carefind.html"
 
 
 _FRONTEND_LOGIC = _FRONTEND.parent / "carefind.logic.js"
+_FRONTEND_BUNDLE = _FRONTEND.parent / "carefind.bundle.js"
 
 
 def _static_file(request: Request, path: Path, media_type: str, missing: str):
@@ -220,9 +221,17 @@ def index(request: Request):
                         "Frontend (carefind.html) not found next to the app package.")
 
 
+@app.get("/carefind.bundle.js")
+def frontend_bundle(request: Request):
+    # The page's interactive layer, bundled from src/ by `npm run build` (esbuild).
+    return _static_file(request, _FRONTEND_BUNDLE, "application/javascript",
+                        "carefind.bundle.js not found — run `npm run build`.")
+
+
 @app.get("/carefind.logic.js")
 def frontend_logic(request: Request):
-    # The page loads its pure logic from this sibling file (also unit-tested by Vitest).
+    # The shared pure logic module — a build input (bundled into carefind.bundle.js)
+    # and the unit-tested source (Vitest). Still served for source transparency.
     return _static_file(request, _FRONTEND_LOGIC, "application/javascript",
                         "carefind.logic.js not found next to the app package.")
 

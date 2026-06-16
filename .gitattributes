@@ -1,0 +1,5 @@
+# Frontend JS is authored and generated (esbuild) with LF. Pin it to LF everywhere so
+# the build-output reproducibility check (CI rebuilds carefind.bundle.js and fails on
+# any diff) is deterministic across platforms, regardless of core.autocrlf.
+*.js text eol=lf
+*.mjs text eol=lf

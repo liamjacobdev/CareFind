@@ -91,7 +91,26 @@ def test_request_id_header_and_metrics(client):
     assert m["upstream_errors"] == 0
 
 
-@pytest.mark.parametrize("path", ["/", "/carefind.logic.js"])
+def test_bundle_served_and_page_has_no_inline_logic(client):
+    """B1: the page loads its logic from the built bundle (a single same-origin
+    script), injects config as data, and carries NO inline business logic — the
+    precondition for dropping 'unsafe-inline' from the script CSP (D3)."""
+    page = client.get("/").text
+    assert 'src="carefind.bundle.js"' in page
+    assert "window.CAREFIND_CONFIG" in page          # config injected as data
+    assert "apiBase" in page
+    # The old inline app functions must be gone from the HTML (now in the bundle).
+    assert "function handleSearch" not in page
+    assert "function bootstrap" not in page
+
+    bundle = client.get("/carefind.bundle.js")
+    assert bundle.status_code == 200
+    assert "javascript" in bundle.headers["content-type"]
+    assert "buildProviders" in bundle.text             # logic bundled in
+    assert "addEventListener" in bundle.text           # app code bundled in
+
+
+@pytest.mark.parametrize("path", ["/", "/carefind.logic.js", "/carefind.bundle.js"])
 def test_static_files_etag_304(client, path):
     """T4.2: static frontend files carry an ETag + Cache-Control, and a repeat load
     with If-None-Match returns 304 (not re-downloaded)."""
