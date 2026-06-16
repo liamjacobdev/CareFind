@@ -23,6 +23,10 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 log = logging.getLogger("carefind")
+# httpx logs each outbound request line ("HTTP Request: GET <url> ...") at INFO — and
+# our NPPES/geocode/FHIR URLs carry search terms (a user's ZIP, name) in the query. Pin
+# it to WARNING so those URLs are never persisted to logs (D3 PII rule).
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Candidate-pool ceilings for radius searches: we widen the NPPES query (ZIP
 # prefix) and over-fetch so distance-filtering has real recall before truncating
@@ -82,7 +86,8 @@ async def rate_limit(
         ip = _client_ip(request)
         decision = _limiter.check(ip)
         if not decision.allowed:
-            log.warning("rate limit hit for %s on %s", ip, request.url.path)
+            # Don't persist the client IP (PII, D3); the path is enough to spot abuse.
+            log.warning("rate limit hit on %s", request.url.path)
             return JSONResponse(
                 {"detail": "Too many requests — slow down and try again shortly."},
                 status_code=429, headers={"Retry-After": str(decision.retry_after)},
@@ -114,6 +119,30 @@ async def request_context(
     response.headers["X-Request-ID"] = rid
     log.info("rid=%s %s %s -> %d (%.1fms)",
              rid, request.method, request.url.path, response.status_code, dur_ms)
+    return response
+
+
+# Security headers on every response (D3). The deployed edge (Caddy) sets the
+# authoritative CSP with the real origin; these apply even app-direct and don't drift
+# with the deploy origin. HSTS is ignored by browsers over plain http, so it's safe to
+# always send. Permissions-Policy allows geolocation only for "Near me" (same origin).
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Frame-Options": "DENY",
+    "Permissions-Policy": "geolocation=(self), camera=(), microphone=(), payment=(), usb=()",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
+    "Cross-Origin-Opener-Policy": "same-origin",
+}
+
+
+@app.middleware("http")
+async def security_headers(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    response = await call_next(request)
+    for k, v in _SECURITY_HEADERS.items():
+        response.headers.setdefault(k, v)
     return response
 
 
@@ -193,6 +222,7 @@ _FRONTEND = Path(__file__).resolve().parent.parent / "carefind.html"
 
 _FRONTEND_LOGIC = _FRONTEND.parent / "carefind.logic.js"
 _FRONTEND_BUNDLE = _FRONTEND.parent / "carefind.bundle.js"
+_FRONTEND_CONFIG = _FRONTEND.parent / "carefind.config.js"
 _MANIFEST = _FRONTEND.parent / "manifest.webmanifest"
 _SERVICE_WORKER = _FRONTEND.parent / "sw.js"
 _ICON = _FRONTEND.parent / "carefind-icon.svg"
@@ -217,6 +247,13 @@ def _static_file(request: Request, path: Path, media_type: str, missing: str) ->
 def index(request: Request) -> Response:
     return _static_file(request, _FRONTEND, "text/html",
                         "Frontend (carefind.html) not found next to the app package.")
+
+
+@app.get("/carefind.config.js")
+def frontend_config(request: Request) -> Response:
+    # Deployment config (data only), external so the page has no inline script (D3).
+    return _static_file(request, _FRONTEND_CONFIG, "application/javascript",
+                        "carefind.config.js not found next to the app package.")
 
 
 @app.get("/carefind.bundle.js")
@@ -322,9 +359,12 @@ def admin_ingest(
 
 
 @app.get("/metrics")
-def metrics_endpoint() -> dict[str, Any]:
+def metrics_endpoint(authorization: str = Header(default="")) -> dict[str, Any]:
     """In-process operational metrics: request counts by status, geocode/FHIR/NPPES
-    cache hit rates, and upstream error count. Not under /api/, so it isn't rate-limited."""
+    cache hit rates, and upstream error count. Protected by the admin token when one is
+    configured (set CAREFIND_ADMIN_TOKEN in production); open in dev when unset."""
+    if settings.admin_token and authorization != f"Bearer {settings.admin_token}":
+        raise HTTPException(403, "Metrics require the admin token.")
     return metrics.snapshot()
 
 
@@ -360,12 +400,13 @@ async def api_npi(
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     except Exception as e:
-        # Keep the user-facing 502 generic, but record what actually failed so a
-        # broken upstream (NPPES down, network error) is visible in the logs. Use
-        # e.__class__ (not type(e)) — `type` is shadowed by the query param above.
+        # Record WHAT failed (error type) without persisting search terms or the
+        # upstream URL — both can carry PII (a user's location/name). Log only which
+        # fields were present, as booleans (D3). e.__class__ (not type(e)) because the
+        # `type` query param shadows the builtin.
         metrics.incr("upstream_error")
-        log.warning("NPPES search failed (zip=%s city=%s state=%s npi=%s name=%s): %s: %s",
-                    zip, city, state, npi, name, e.__class__.__name__, e)
+        log.warning("NPPES search failed (fields zip=%s city=%s state=%s npi=%s name=%s): %s",
+                    bool(zip), bool(city), bool(state), bool(npi), bool(name), e.__class__.__name__)
         raise HTTPException(502, "Could not reach the registry.") from e
 
 
@@ -438,9 +479,9 @@ async def providers_search(
         raise HTTPException(400, str(e)) from e
     except Exception as e:
         metrics.incr("upstream_error")
-        # e.__class__ (not type(e)) — `type` is shadowed by the query param above.
-        log.warning("provider search failed (zip=%s city=%s state=%s name=%s): %s: %s",
-                    zip, city, state, name, e.__class__.__name__, e)
+        # PII-free (D3): log which fields were present, not their values or the URL.
+        log.warning("provider search failed (fields zip=%s city=%s state=%s name=%s): %s",
+                    bool(zip), bool(city), bool(state), bool(name), e.__class__.__name__)
         raise HTTPException(502, "Could not reach the registry.") from e
 
     # Did the upstream NPPES pool itself hit its ceiling? If so even the post-filter

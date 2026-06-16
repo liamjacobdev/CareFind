@@ -6,16 +6,20 @@
   <title>CareFind — Find licensed US healthcare providers from the official CMS registry</title>
   <meta name="description" content="Search the official US CMS NPPES registry of 8M+ licensed healthcare providers by location, specialty, or name. Real records, real map locations, no login." />
 
-  <!-- Defense-in-depth. Single-file apps run inline script, so script-src keeps
-       'unsafe-inline', but connect/img/frame are locked to known origins so a
-       content bug can't exfiltrate to an arbitrary host or be framed. -->
+  <!-- Defense-in-depth (D3). script-src has NO 'unsafe-inline': all JS is external,
+       same-origin (config + bundle) or from the pinned Leaflet CDNs, so an injected
+       inline <script> won't execute. style-src keeps 'unsafe-inline' only because
+       per-provider colors and Leaflet set inline style attributes (style injection is
+       far lower risk than script injection). connect/img/frame are locked down. The
+       server also sends this as a real CSP header (see app/main.py / Caddyfile). -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;
+    script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;
     font-src https://fonts.gstatic.com data:;
     img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org;
     connect-src 'self' http://localhost:8000 http://localhost:8787 https://npiregistry.cms.hhs.gov https://nominatim.openstreetmap.org;
+    worker-src 'self'; manifest-src 'self';
     base-uri 'none'; object-src 'none'; frame-ancestors 'self';" />
 
   <meta property="og:title" content="CareFind — official US provider registry search" />
@@ -576,15 +580,10 @@
 <!-- Deployment config — injected as data only (no business logic), so the CSP can
      drop 'unsafe-inline' for scripts once this block is nonce'd (D3). The values are
      rewritten per environment by configure_frontend.py. -->
-<script id="carefind-config">
-window.CAREFIND_CONFIG = {
-  apiBase: 'http://localhost:8000',
-  claimEmail: 'providers@carefind.example',
-  allowPublicProxies: false
-};
-</script>
-<!-- The app, bundled from src/ by `npm run build` (esbuild) into a single same-origin
-     script. No inline business logic remains in this HTML file. -->
+<!-- Deployment config (data only) + the app bundle. Both are external same-origin
+     scripts, so this HTML carries no inline executable script and the CSP forbids
+     'unsafe-inline' for script-src. -->
+<script src="carefind.config.js"></script>
 <script src="carefind.bundle.js"></script>
 </body>
 </html>

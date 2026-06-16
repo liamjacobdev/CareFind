@@ -171,6 +171,13 @@ Any container host works (Fly.io, Railway, Render, a VPS). Keep the SQLite volum
 
 All `/api/*` routes are **rate-limited per client** (`RATE_LIMIT_MAX`/`RATE_LIMIT_WINDOW`; behind a proxy set `CAREFIND_TRUST_PROXY=true` so the bucket is the real client IP — see the deploy note above) and **CORS** is locked to `ALLOWED_ORIGINS` (localhost-only if unset — never a blanket `*`).
 
+### Security & privacy
+- **CSP with no `'unsafe-inline'` for scripts** — all JS is external (same-origin config + bundle) or the pinned Leaflet CDNs, so an injected inline `<script>` won't run. Sent as a real header at the edge (Caddyfile) and as the page's meta CSP.
+- **Full security headers** on every response: HSTS, `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` (geolocation only for "near me"), `Cross-Origin-Opener-Policy`.
+- **No PII in logs** — search terms, the upstream URL, and client IPs are never persisted (failure logs record only which fields were present + the error type; httpx request logging is pinned to WARNING). Enforced by a test.
+- **Input-length caps** on every query field; **`/admin/ingest` and `/metrics`** are guarded by `CAREFIND_ADMIN_TOKEN`.
+- See [docs/threat-model.md](docs/threat-model.md) for the full model and accepted residual risks.
+
 ## Tests
 ```bash
 pip install -r requirements-dev.txt

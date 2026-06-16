@@ -48,12 +48,18 @@ def build_params(q: dict[str, Any]) -> dict[str, Any]:
         params["number"] = npi
         return params
 
-    zip_ = str(q.get("zip") or "").strip()
-    city = str(q.get("city") or "").strip()
-    state = str(q.get("state") or "").strip()
-    name = str(q.get("name") or "").strip()
-    taxonomy = str(q.get("taxonomy") or "").strip()
-    etype = str(q.get("type") or "").strip()
+    # Cap input lengths (D3): bound each field so a hostile or mistyped param can't
+    # bloat the upstream query. Generous for real names/cities; tight where the field
+    # is a code. No real value is truncated in practice.
+    def _f(key: str, n: int) -> str:
+        return str(q.get(key) or "").strip()[:n]
+
+    zip_ = _f("zip", 10)
+    city = _f("city", 80)
+    state = _f("state", 2)
+    name = _f("name", 80)
+    taxonomy = _f("taxonomy", 80)
+    etype = _f("type", 8)
 
     try:
         radius = int(q.get("radius") or 0)

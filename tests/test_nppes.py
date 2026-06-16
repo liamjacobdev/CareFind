@@ -20,6 +20,14 @@ def test_empty_query_rejected():
         nppes.build_params({})
 
 
+def test_input_lengths_are_capped():
+    """D3: a hostile/mistyped param can't bloat the upstream query — fields are bounded."""
+    p = nppes.build_params({"name": "x" * 5000, "city": "y" * 5000, "state": "ZZZZ"})
+    assert len(p["last_name"].rstrip("*")) <= 80
+    assert len(p["city"]) <= 80
+    assert len(p["state"]) <= 2
+
+
 def test_zip_exact_for_small_radius():
     assert nppes.build_params({"zip": "32536", "radius": 10})["postal_code"] == "32536"
     assert nppes.build_params({"zip": "32536"})["postal_code"] == "32536"

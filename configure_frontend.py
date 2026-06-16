@@ -23,9 +23,10 @@ import sys
 from pathlib import Path
 
 SRC = Path(__file__).parent / "carefind.html"
+CONFIG_SRC = Path(__file__).parent / "carefind.config.js"
 
-# Mirrors the placeholder in carefind.html; the page hides claim affordances while
-# CLAIM_EMAIL equals this, so swapping it in is what turns the feature on.
+# Mirrors the placeholder in carefind.config.js; the page hides claim affordances while
+# claimEmail equals this, so swapping it in is what turns the feature on.
 PLACEHOLDER_CLAIM_EMAIL = "providers@carefind.example"
 
 
@@ -42,28 +43,26 @@ PUBLIC_PROXY_ORIGINS = [
 def configure(api_base: str, out: Path, allow_public_proxies: bool = False,
               claim_email: str = None) -> None:
     api_base = api_base.rstrip("/")
+
+    # ── 1) Rewrite carefind.config.js (apiBase / claimEmail / allowPublicProxies) ──
+    cfg = CONFIG_SRC.read_text(encoding="utf-8")
+    if claim_email:  # only when a real address is supplied; else keep the placeholder
+        new = re.sub(r"claimEmail:\s*'[^']*'", f"claimEmail: '{claim_email}'", cfg, count=1)
+        if new == cfg:
+            raise SystemExit("Could not find the claimEmail config field to update.")
+        cfg = new
+    new = re.sub(r"apiBase:\s*'[^']*'", f"apiBase: '{api_base}'", cfg, count=1)
+    if new == cfg:
+        raise SystemExit("Could not find the apiBase config field to update.")
+    cfg = new
+    if allow_public_proxies:
+        cfg = re.sub(r"allowPublicProxies:\s*false", "allowPublicProxies: true", cfg, count=1)
+    config_out = out.parent / "carefind.config.js"
+    config_out.write_text(cfg, encoding="utf-8")
+
+    # ── 2) Rewrite carefind.html's CSP connect-src to the real API origin ──
     html = SRC.read_text(encoding="utf-8")
 
-    # These live in the injected `window.CAREFIND_CONFIG` block in carefind.html, so
-    # the page carries no inline business logic. We rewrite the object's fields.
-
-    # 0) claimEmail — only when a real address is supplied; otherwise leave the
-    # placeholder (the page hides claim affordances while it's the placeholder).
-    if claim_email:
-        new = re.sub(r"claimEmail:\s*'[^']*'",
-                     f"claimEmail: '{claim_email}'", html, count=1)
-        if new == html:
-            raise SystemExit("Could not find the claimEmail config field to update.")
-        html = new
-
-    # 1) apiBase — where the page sends requests.
-    new = re.sub(r"apiBase:\s*'[^']*'",
-                 f"apiBase: '{api_base}'", html, count=1)
-    if new == html:
-        raise SystemExit("Could not find the apiBase config field to update.")
-    html = new
-
-    # 2) CSP connect-src: drop the localhost dev origins, add the real API origin.
     def fix_connect(m):
         directive = m.group(0)
         directive = directive.replace("http://localhost:8000 ", "")
@@ -72,7 +71,7 @@ def configure(api_base: str, out: Path, allow_public_proxies: bool = False,
             directive = directive.replace("connect-src 'self' ",
                                           f"connect-src 'self' {api_base} ")
         # Re-add the public CORS-proxy origins ONLY when explicitly opted in, so the
-        # CSP and the ALLOW_PUBLIC_PROXIES toggle below stay in agreement.
+        # CSP and the allowPublicProxies toggle stay in agreement.
         if allow_public_proxies:
             extra = " ".join(o for o in PUBLIC_PROXY_ORIGINS if o not in directive)
             if extra:
@@ -80,17 +79,12 @@ def configure(api_base: str, out: Path, allow_public_proxies: bool = False,
         return directive
 
     html = re.sub(r"connect-src[^;]*;", fix_connect, html, count=1)
-
-    # Keep the JS opt-in flag in lockstep with the CSP so enabling proxies actually
-    # works (the page won't reach an origin the CSP forbids, and vice-versa).
-    if allow_public_proxies:
-        html = re.sub(r"allowPublicProxies:\s*false",
-                      "allowPublicProxies: true", html, count=1)
-
     out.write_text(html, encoding="utf-8")
+
     proxies = " (public CORS proxies enabled)" if allow_public_proxies else ""
-    claim = f"; CLAIM_EMAIL set to {claim_email}" if claim_email else ""
-    print(f"Wrote {out} — API_BASE and CSP connect-src now point at {api_base}{proxies}{claim}")
+    claim = f"; claimEmail set to {claim_email}" if claim_email else ""
+    print(f"Wrote {out} + {config_out} — apiBase and CSP connect-src now point at "
+          f"{api_base}{proxies}{claim}")
 
 
 def main(argv) -> None:

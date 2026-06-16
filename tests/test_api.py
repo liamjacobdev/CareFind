@@ -134,8 +134,9 @@ def test_bundle_served_and_page_has_no_inline_logic(client):
     precondition for dropping 'unsafe-inline' from the script CSP (D3)."""
     page = client.get("/").text
     assert 'src="carefind.bundle.js"' in page
-    assert "window.CAREFIND_CONFIG" in page          # config injected as data
-    assert "apiBase" in page
+    # Config is external (D3) — referenced, not inlined — so the HTML has no inline JS.
+    assert 'src="carefind.config.js"' in page
+    assert "window.CAREFIND_CONFIG" not in page
     # The old inline app functions must be gone from the HTML (now in the bundle).
     assert "function handleSearch" not in page
     assert "function bootstrap" not in page
@@ -145,6 +146,68 @@ def test_bundle_served_and_page_has_no_inline_logic(client):
     assert "javascript" in bundle.headers["content-type"]
     assert "buildProviders" in bundle.text             # logic bundled in
     assert "addEventListener" in bundle.text           # app code bundled in
+
+
+def test_security_headers_and_strict_csp(client):
+    """D3: full security-header set on every response; the page's CSP forbids inline
+    script (no 'unsafe-inline' in script-src) and loads config + app as external JS."""
+    r = client.get("/")
+    h = r.headers
+    assert h["X-Content-Type-Options"] == "nosniff"
+    assert h["X-Frame-Options"] == "DENY"
+    assert "strict-origin" in h["Referrer-Policy"]
+    assert "geolocation=(self)" in h["Permissions-Policy"]
+    assert "max-age=" in h["Strict-Transport-Security"]
+
+    page = r.text
+    # The CSP meta drops 'unsafe-inline' from script-src.
+    csp = page.split('Content-Security-Policy" content="', 1)[1].split('" />', 1)[0]
+    script_src = next(d for d in csp.split(";") if d.strip().startswith("script-src"))
+    assert "'unsafe-inline'" not in script_src
+    # No inline executable <script> blocks remain; config + app are external.
+    assert "window.CAREFIND_CONFIG" not in page
+    assert 'src="carefind.config.js"' in page and 'src="carefind.bundle.js"' in page
+
+    cfg = client.get("/carefind.config.js")
+    assert cfg.status_code == 200 and "window.CAREFIND_CONFIG" in cfg.text
+
+
+def test_metrics_protected_by_admin_token(client, monkeypatch):
+    # Open in dev (no token configured).
+    monkeypatch.setattr(main.settings, "admin_token", "")
+    assert client.get("/metrics").status_code == 200
+    # Protected once a token is configured.
+    monkeypatch.setattr(main.settings, "admin_token", "s3cret")
+    assert client.get("/metrics").status_code == 403
+    assert client.get("/metrics", headers={"Authorization": "Bearer s3cret"}).status_code == 200
+
+
+def test_no_pii_in_logs(client, monkeypatch, caplog):
+    """D3 gate: search terms, the upstream URL, and client IPs must not be persisted to
+    logs. The failure log records only which fields were present + the error type."""
+    async def boom(q):
+        # An httpx-style error whose message embeds the URL+query — must NOT be logged.
+        raise RuntimeError("GET https://npiregistry.cms.hhs.gov/api/?postal_code=90210&last_name=Secretpatient failed")
+    monkeypatch.setattr(main.nppes, "search", boom)
+
+    with caplog.at_level("INFO"):
+        r = client.get("/api/providers/search", params={"zip": "90210", "name": "Secretpatient"})
+    assert r.status_code == 502
+    blob = "\n".join(rec.getMessage() for rec in caplog.records)
+    assert "90210" not in blob          # the searched ZIP is not persisted
+    assert "Secretpatient" not in blob  # the searched name is not persisted
+    assert "npiregistry.cms.hhs.gov/api/?" not in blob  # nor the upstream URL/query
+
+    # Rate-limit log must not persist the client IP.
+    caplog.clear()
+    monkeypatch.setattr(main.settings, "trust_proxy", True)
+    monkeypatch.setattr(main.settings, "rate_limit_max", 1)
+    main._limiter.reset()
+    h = {"X-Forwarded-For": "203.0.113.77"}
+    with caplog.at_level("WARNING"):
+        client.get("/api/insurance/plans", headers=h)
+        client.get("/api/insurance/plans", headers=h)  # trips the limit
+    assert "203.0.113.77" not in "\n".join(rec.getMessage() for rec in caplog.records)
 
 
 def test_pwa_assets_served(client):

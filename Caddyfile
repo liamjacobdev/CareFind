@@ -8,10 +8,19 @@ api.yourdomain.com {
 	encode gzip
 
 	# CareFind sets per-route CORS itself (see ALLOWED_ORIGINS); nothing to add here.
+	# Full security-header set (D3) — this is the authoritative edge that
+	# securityheaders.com grades. The CSP mirrors the page's meta CSP: NO 'unsafe-inline'
+	# for script-src (all JS is same-origin or the pinned Leaflet CDNs); 'unsafe-inline'
+	# stays only for style-src (per-provider colors + Leaflet inline styles). Replace the
+	# https://api.yourdomain.com connect-src origin with this deployment's real API origin.
 	header {
-		# Sensible security headers for an API behind TLS.
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(self), camera=(), microphone=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; connect-src 'self' https://npiregistry.cms.hhs.gov https://nominatim.openstreetmap.org; worker-src 'self'; manifest-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'"
 		-Server
 	}
 }
