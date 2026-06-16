@@ -121,7 +121,8 @@
   .input-with-icon svg { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--faint); pointer-events:none; }
   .input-with-icon .input-field { padding-left:2.1rem; }
   .loc-btn { position:absolute; right:6px; top:50%; transform:translateY(-50%); border:none; background:var(--mist); color:var(--jade-dd);
-    border-radius:6px; padding:4px 7px; font-size:.66rem; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; font-family:inherit; }
+    border-radius:6px; padding:4px 7px; font-size:.66rem; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:4px; font-family:inherit;
+    min-height:24px; min-width:24px; }  /* WCAG 2.2 AA 2.5.8 target size (D2) */
   .loc-btn:hover { background:var(--mist-line); }
 
   #search-btn { width:100%; margin-top:5px; padding:.8rem 1.25rem; position:relative; overflow:hidden;
@@ -197,7 +198,7 @@
   #results-bar-text b { color:var(--ink); font-weight:700; }
   #results-bar-text .results-hint { color:var(--honey); font-weight:500; }
   .sort-wrap { display:inline-flex; align-items:center; gap:6px; }
-  .sort-wrap label { color:var(--faint); }
+  .sort-wrap label { color:var(--muted); }  /* >=4.5:1 on white (WCAG AA, D2) */
   .sort-select { border:1px solid var(--border-2); border-radius:6px; background:#fff; font-family:inherit; font-size:.72rem; color:var(--text); padding:3px 22px 3px 8px; cursor:pointer; appearance:none;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235d6b66' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 6px center; }
 
@@ -229,7 +230,9 @@
   .avatar::after { content:''; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(150deg,rgba(255,255,255,.22),transparent 60%); }
   .card-body { flex:1; min-width:0; }
   .card-topline { display:flex; align-items:center; gap:6px; margin:1px 26px 1px 0; }
-  .card-name { font-size:.9rem; font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.25; }
+  .card-name { font-size:.9rem; font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.25;
+    display:block; max-width:100%; background:none; border:none; padding:0; margin:0; text-align:left; font-family:inherit; cursor:pointer; }
+  .card-name:focus-visible { outline:2px solid var(--jade); outline-offset:2px; border-radius:3px; }
   .type-chip { font-size:.58rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); background:var(--paper-2); border:1px solid var(--border); border-radius:5px; padding:1px 5px; flex-shrink:0; }
   .card-specialty { margin:0 0 6px; font-size:.74rem; font-weight:600; color:var(--jade-d); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .card-meta { margin:0 0 4px; font-size:.74rem; color:var(--muted); line-height:1.45; display:flex; gap:5px; align-items:flex-start; }
@@ -525,7 +528,9 @@
         </span>
       </div>
 
-      <div id="results-list" role="region" aria-label="Search results"></div>
+      <!-- tabindex=0 so the scrollable results region is keyboard-scrollable even when
+           it holds only non-focusable content (e.g. the empty state) — WCAG (D2). -->
+      <div id="results-list" role="region" aria-label="Search results" tabindex="0"></div>
     </aside>
 
     <!-- ── MAP ── -->

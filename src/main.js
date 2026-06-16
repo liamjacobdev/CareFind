@@ -167,12 +167,13 @@ function plotMarkers(){
   if(!mapInstance) return;
   clearMarkers();
   if(state.center){
-    centerMarker=L.marker(state.center,{icon:L.divIcon({className:'',html:'<div class="center-pin"></div>',iconSize:[18,18],iconAnchor:[9,9]}),interactive:false,zIndexOffset:-100}).addTo(mapInstance);
+    centerMarker=L.marker(state.center,{icon:L.divIcon({className:'',html:'<div class="center-pin"></div>',iconSize:[18,18],iconAnchor:[9,9]}),interactive:false,keyboard:false,zIndexOffset:-100}).addTo(mapInstance);
   }
   const docs=state.providers.filter(d=>d.lat&&d.lng);
   const bounds=L.latLngBounds(state.center?[state.center]:[]);
   docs.forEach(doc=>{
-    const m=L.marker([doc.lat,doc.lng],{icon:createMarkerIcon(doc.color,false)});
+    // title/alt give the keyboard-focusable marker an accessible name (WCAG aria-command-name, D2).
+    const m=L.marker([doc.lat,doc.lng],{icon:createMarkerIcon(doc.color,false),title:doc.name,alt:`${doc.name} — ${doc.specialty}`});
     m.bindPopup(buildPopup(doc),{maxWidth:280,className:'carefind-popup'});
     m.on('click',()=>selectDoctor(doc.npi,false));
     m.on('popupopen',()=>{ updateMarkerStyles(doc.npi); highlightCard(doc.npi); });
@@ -185,7 +186,7 @@ function plotMarkers(){
 function addOrMoveMarker(doc){
   if(!mapInstance||!doc.lat||!doc.lng) return;
   if(mapMarkers[doc.npi]){ mapMarkers[doc.npi].setLatLng([doc.lat,doc.lng]).setPopupContent(buildPopup(doc)); return; }
-  const m=L.marker([doc.lat,doc.lng],{icon:createMarkerIcon(doc.color,false)});
+  const m=L.marker([doc.lat,doc.lng],{icon:createMarkerIcon(doc.color,false),title:doc.name,alt:`${doc.name} — ${doc.specialty}`});
   m.bindPopup(buildPopup(doc),{maxWidth:280,className:'carefind-popup'});
   m.on('click',()=>selectDoctor(doc.npi,false));
   m.on('popupopen',()=>{ updateMarkerStyles(doc.npi); highlightCard(doc.npi); });
@@ -582,7 +583,7 @@ function buildCard(doc,idx){
     <div class="card-head">
       <div class="avatar" style="background:${doc.color};">${esc(doc.initials||'?')}</div>
       <div class="card-body">
-        <div class="card-topline"><span class="card-name" title="${esc(doc.name)}">${esc(doc.name)}</span><span class="type-chip">${doc.isOrg?'Org':'Indiv'}</span></div>
+        <div class="card-topline"><button type="button" class="card-name" data-action="open-detail" data-npi="${esc(doc.npi)}" title="${esc(doc.name)}" aria-label="View details for ${esc(doc.name)}">${esc(doc.name)}</button><span class="type-chip">${doc.isOrg?'Org':'Indiv'}</span></div>
         <p class="card-specialty" title="${esc(doc.specialty)}">${esc(doc.specialty)}</p>
         ${doc.fullAddress?`<p class="card-meta"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>${esc(doc.fullAddress)}</p>`:`<p class="card-meta none">No practice address on file</p>`}
         ${doc.phone?`<p class="card-meta"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.7a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.4-1.1a2 2 0 0 1 2.1-.5c.9.3 1.8.5 2.7.6a2 2 0 0 1 1.7 2Z"/></svg>${esc(doc.phone)}</p>`:''}
