@@ -143,7 +143,16 @@
                     : {cls:'unknown', text:'Unverified'};
   }
 
+  // Format an epoch-seconds timestamp as a short, stable date for the "checked
+  // <date>" provenance link. UTC so it doesn't drift across timezones in tests.
+  function fmtDate(epochSeconds){
+    if(epochSeconds==null) return '';
+    const d=new Date(epochSeconds*1000);
+    if(isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US',{timeZone:'UTC',year:'numeric',month:'short',day:'numeric'});
+  }
+
   return { TAXONOMY_MAP, PALETTE, toTitleCase, formatPhone, hashStr, haversine,
            cssEsc, esc, buildNpiParams, buildProviders, adaptBackendProvider,
-           coverageStatus };
+           coverageStatus, fmtDate };
 });

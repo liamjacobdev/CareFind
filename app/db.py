@@ -75,6 +75,17 @@ def init_db() -> None:
             "  PRIMARY KEY (payer, npi)"
             ")"
         )
+        # Provenance for a verified source: where its data came from (a public URL a
+        # patient can use to verify) and when it was last refreshed (epoch seconds).
+        # Written by each ingest; read into every verified result so a green badge is
+        # always traceable to a real source with a fetch date (the A3 trust rule).
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS source_meta ("
+            "  source_id TEXT PRIMARY KEY,"
+            "  source_url TEXT,"
+            "  fetched_at REAL NOT NULL"
+            ")"
+        )
 
 
 # ── Medicare index ──────────────────────────────────────────────────────────
@@ -250,3 +261,26 @@ def fhir_cache_set_many(payer: str, items, fetched_at: float) -> int:
             rows,
         )
     return len(rows)
+
+
+# ── Source provenance (where a verified source's data came from + when) ────────
+def source_meta_set(source_id: str, source_url: str, fetched_at: float) -> None:
+    """Record (or refresh) a verified source's provenance. Called by each ingest."""
+    with _write_lock, _conn() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO source_meta (source_id, source_url, fetched_at) "
+            "VALUES (?, ?, ?)",
+            (str(source_id), source_url or "", float(fetched_at)),
+        )
+
+
+def source_meta_get(source_id: str):
+    """Return (source_url, fetched_at) for a source, or None if never recorded."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT source_url, fetched_at FROM source_meta WHERE source_id = ?",
+            (str(source_id),),
+        ).fetchone()
+        if row is not None:
+            return row["source_url"] or "", row["fetched_at"]
+    return None

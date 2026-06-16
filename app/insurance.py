@@ -84,9 +84,20 @@ class InsuranceSource:
     # "plan"  — the answer is about a specific, single plan/program (e.g. Medicare
     #   Original): a True here is a genuine plan-level confirmation.
     level = "payer"
+    # A public URL a patient can follow to verify this source themselves. Verified
+    # sources populate it; it backs the "Verify · checked <date>" deep link (A3).
+    source_url = ""
 
     def available(self) -> bool:
         return False
+
+    def provenance_many(self, npis: list) -> dict:
+        """{str(npi): {"source_url": str, "fetched_at": float|None}} for these NPIs.
+
+        Provenance only exists for verified sources; the estimated/base tier returns
+        nothing, so an estimate can never acquire a (misleading) source link or date.
+        """
+        return {}
 
     async def check(self, npi: str):
         return None
@@ -125,6 +136,13 @@ class MedicareSource(InsuranceSource):
         present = db.medicare_has_many(npis)
         return {n: (n in present) for n in npis}
 
+    def provenance_many(self, npis: list) -> dict:
+        meta = db.source_meta_get("medicare")
+        if not meta:
+            return {}
+        url, ts = meta
+        return {str(n): {"source_url": url, "fetched_at": ts} for n in npis}
+
 
 class TicSource(InsuranceSource):
     """A commercial payer backed by an ingested Transparency-in-Coverage file.
@@ -154,6 +172,13 @@ class TicSource(InsuranceSource):
         present = db.tic_has_many(self.id, npis)
         return {n: (n in present) for n in npis}
 
+    def provenance_many(self, npis: list) -> dict:
+        meta = db.source_meta_get(self.id)
+        if not meta:
+            return {}
+        url, ts = meta
+        return {str(n): {"source_url": url, "fetched_at": ts} for n in npis}
+
 
 class FhirPlanNetSource(InsuranceSource):
     """One configured payer's public FHIR Plan-Net Provider Directory (verified)."""
@@ -169,9 +194,23 @@ class FhirPlanNetSource(InsuranceSource):
         self.api_key_header = cfg.get("api_key_header")
         self.api_key = cfg.get("api_key")
         self.npi_system = cfg.get("npi_system", "http://hl7.org/fhir/sid/us-npi")
+        # A patient-facing verify link: the payer's published directory if given,
+        # else the FHIR endpoint we actually queried.
+        self.source_url = cfg.get("verify_url") or cfg.get("directory_url") or self.base
 
     def available(self) -> bool:
         return bool(self.base)
+
+    def provenance_many(self, npis: list) -> dict:
+        """Per-NPI provenance: the fetch date is the cache row's timestamp (when this
+        provider's network status was actually read from the live endpoint)."""
+        rows = db.fhir_cache_get_many(self.id, npis)
+        out = {}
+        for n in npis:
+            row = rows.get(str(n))
+            out[str(n)] = {"source_url": self.source_url,
+                           "fetched_at": row[1] if row else None}
+        return out
 
     def _headers(self):
         h = {"Accept": "application/fhir+json", "User-Agent": settings.contact_ua}
@@ -417,6 +456,9 @@ class Registry:
                 contexts[npi] = {"state": p.get("state") or p.get("stateAb") or ""}
         npis = list(contexts.keys())
         result = {npi: {} for npi in npis}
+        # Verified winners grouped by their source, so provenance is fetched once per
+        # source rather than per result.
+        verified_by_source: dict = {}
 
         for plan_id, srcs in self._sources_by_plan().items():
             if only and plan_id not in only:
@@ -448,6 +490,18 @@ class Registry:
                         "value": value, "confidence": s.confidence, "source": s.id,
                         "level": s.level,
                     }
+                    if s.confidence == "verified":
+                        verified_by_source.setdefault(s, []).append((npi, plan_id))
+
+        # Stamp provenance (source URL + fetch date) onto every verified result, so a
+        # green badge is always traceable to a real source — the A3 trust invariant.
+        for s, winners in verified_by_source.items():
+            prov = s.provenance_many([npi for npi, _ in winners])
+            for npi, plan_id in winners:
+                pv = prov.get(str(npi))
+                if pv:
+                    result[npi][plan_id]["source_url"] = pv.get("source_url", "")
+                    result[npi][plan_id]["fetched_at"] = pv.get("fetched_at")
         return result
 
 

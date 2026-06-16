@@ -61,6 +61,37 @@ def test_medicare_ingest_local_file_still_works(temp_db):
     assert db.medicare_count() == added
 
 
+# ── A3: ingests record provenance (source URL + fetch date) ───────────────────
+def test_medicare_ingest_records_provenance(temp_db):
+    """A local-file ingest must still record a verifiable public source URL + date,
+    so verified Medicare answers are traceable (the A3 trust rule)."""
+    ingest_medicare.ingest("sample_medicare.csv")
+    meta = db.source_meta_get("medicare")
+    assert meta is not None
+    url, fetched_at = meta
+    assert url == ingest_medicare.CMS_ENROLLMENT_URL  # local file -> canonical URL
+    assert fetched_at > 0
+
+
+@respx.mock
+def test_medicare_ingest_records_remote_url(temp_db, monkeypatch):
+    monkeypatch.setattr(settings, "ingest_max_bytes", 10 * 1024 * 1024)
+    respx.get(CMS).mock(return_value=httpx.Response(200, content=b"NPI\n1234567893\n"))
+    ingest_medicare.ingest(CMS)
+    url, _ = db.source_meta_get("medicare")
+    assert url == CMS  # ingesting from a live URL records that URL
+
+
+def test_tic_ingest_records_provenance(temp_db, tmp_path):
+    npi_file = tmp_path / "aetna_npis.txt"
+    npi_file.write_text("1003000126\n", encoding="utf-8")
+    ingest_tic.ingest("aetna", str(npi_file))
+    meta = db.source_meta_get("aetna")
+    assert meta is not None
+    url, fetched_at = meta
+    assert url == str(npi_file) and fetched_at > 0
+
+
 # ── T3.3: scheduled TiC ingestion job ─────────────────────────────────────────
 def test_tic_job_flips_payer_to_verified_and_is_idempotent(temp_db, tmp_path):
     """Running the job for a payer ingests its in-network NPIs and flips it to a

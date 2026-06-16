@@ -10,8 +10,16 @@ Usage:
 import csv
 import io
 import sys
+import time
 
 from . import db
+
+# The public CMS dataset this index is built from — used as the provenance/verify
+# link when the operator ingests from a local file rather than the live URL.
+CMS_ENROLLMENT_URL = (
+    "https://data.cms.gov/provider-characteristics/medicare-provider-supplier-enrollment/"
+    "medicare-fee-for-service-public-provider-enrollment"
+)
 
 
 def _open_source(src: str):
@@ -58,6 +66,11 @@ def ingest(src: str) -> int:
                     batch = []
         if batch:
             added += db.medicare_add_many(batch)
+        # Record provenance: a verified Medicare answer is traceable to this source
+        # with a fetch date. Use the live URL when ingesting from one, else the
+        # canonical public dataset page.
+        source_url = src if src.startswith(("http://", "https://")) else CMS_ENROLLMENT_URL
+        db.source_meta_set("medicare", source_url, time.time())
         return added
     finally:
         fh.close()

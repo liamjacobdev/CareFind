@@ -154,6 +154,9 @@
   .cov-status.unknown { color:var(--faint); }
   .cov-status.likely { color:var(--honey); }
   .cov-status.innet { color:#1f6f8b; }   /* payer network listing — distinct from green "Confirmed" */
+  .cov-right { display:inline-flex; align-items:center; gap:8px; }
+  .cov-verify { font-size:.66rem; font-weight:600; color:var(--muted); text-decoration:underline; white-space:nowrap; }
+  .cov-verify:hover { color:var(--jade-d); }
 
   /* Insurance filter: mode toggle, legend, grouped chips, confidence dots */
   .ins-mode { display:inline-flex; border:1.5px solid var(--border-2); border-radius:8px; overflow:hidden; margin-bottom:9px; }
@@ -1207,7 +1210,12 @@ function coverageHtml(doc, insSearch){
       const info=ins[id];
       const s=coverageStatus(info);
       const status=`<span class="cov-status ${s.cls}">${esc(s.text)}</span>`;
-      return `<div class="cov-item"><span>${esc(planLabel(id))}</span>${status}</div>`;
+      // Provenance: a verified answer always carries a source URL + fetch date, so
+      // the patient can verify it at the real source (the A3 trust rule).
+      const verify=(info.confidence==='verified' && info.source_url)
+        ? `<a class="cov-verify" href="${esc(info.source_url)}" target="_blank" rel="noopener">verify${info.fetched_at?` · checked ${esc(fmtDate(info.fetched_at))}`:''}</a>`
+        : '';
+      return `<div class="cov-item"><span>${esc(planLabel(id))}</span><span class="cov-right">${status}${verify}</span></div>`;
     }).join('');
     return `<div class="cov-list">${items}</div>
       <p style="font-size:.7rem;color:var(--faint);margin:9px 0 0;line-height:1.5;"><b>Confirmed</b> = enrolled in a specific program (e.g. official Medicare). <b>In-network</b> = listed in this payer's network directory — confirm your specific plan. <b>Likely</b> = a major payer operating in this area, not provider-specific. <a href="${insSearch}" target="_blank" rel="noopener">Confirm directly</a>.</p>`;

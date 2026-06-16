@@ -8,8 +8,20 @@ import logic from '../carefind.logic.js';
 const {
   esc, cssEsc, haversine, formatPhone, toTitleCase, hashStr,
   buildNpiParams, buildProviders, adaptBackendProvider, PALETTE, TAXONOMY_MAP,
-  coverageStatus,
+  coverageStatus, fmtDate,
 } = logic;
+
+describe('fmtDate — provenance "checked <date>" (A3)', () => {
+  it('formats epoch seconds as a stable UTC date', () => {
+    // 1700000000 = 2023-11-14T22:13:20Z
+    expect(fmtDate(1700000000)).toBe('Nov 14, 2023');
+  });
+  it('returns empty for a missing/invalid timestamp', () => {
+    expect(fmtDate(null)).toBe('');
+    expect(fmtDate(undefined)).toBe('');
+    expect(fmtDate(NaN)).toBe('');
+  });
+});
 
 describe('coverageStatus — payer vs plan level (A2)', () => {
   it('labels a plan-level verified hit "Confirmed"', () => {

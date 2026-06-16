@@ -62,8 +62,10 @@ async def test_regional_payer_state_scoped_and_graduates_when_wired(temp_db, mon
         respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(200, json=_IN_NETWORK))
         reg2 = Registry(); reg2.build()
         ann2 = await reg2.annotate([{"npi": "1", "stateAb": "WA"}], only=["premera_bcbs"])
-    assert ann2["1"]["premera_bcbs"] == {
-        "value": True, "confidence": "verified", "source": "premera_bcbs", "level": "payer"}
+    r = ann2["1"]["premera_bcbs"]
+    assert (r["value"], r["confidence"], r["source"], r["level"]) == (
+        True, "verified", "premera_bcbs", "payer")
+    assert r["source_url"] == base and r["fetched_at"] > 0  # provenance attached
 
 
 @pytest.mark.asyncio
@@ -142,6 +144,47 @@ async def test_annotate_results_carry_level(temp_db):
     assert ann["1003000126"]["medicare"]["level"] == "plan"
     # A TiC ingest is a payer network listing, not a specific-plan confirmation.
     assert ann["1003000126"]["aetna"]["level"] == "payer"
+
+
+# ── A3: every verified answer carries source URL + fetch date ──────────────────
+@pytest.mark.asyncio
+async def test_verified_medicare_carries_provenance(temp_db):
+    db.medicare_add_many(["1003000126"])
+    db.source_meta_set("medicare", "https://data.cms.gov/enrollment", 1700000000.0)
+    reg = _build()
+    ann = await reg.annotate([{"npi": "1003000126", "stateAb": "FL"}], only=["medicare"])
+    r = ann["1003000126"]["medicare"]
+    assert r["value"] is True and r["confidence"] == "verified"
+    assert r["source_url"] == "https://data.cms.gov/enrollment"
+    assert r["fetched_at"] == 1700000000.0
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_verified_fhir_carries_per_npi_provenance(temp_db, monkeypatch):
+    """A FHIR verified hit carries the payer's verify URL and the cache fetch date."""
+    base = "https://payer.example/r4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [{
+        "id": "cigna", "label": "Cigna", "base_url": base,
+        "verify_url": "https://cigna.example/find-a-doctor"}])
+    respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(200, json=_IN_NETWORK))
+    reg = Registry(); reg.build()
+    ann = await reg.annotate([{"npi": "1111111111", "stateAb": "CA"}], only=["cigna"])
+    r = ann["1111111111"]["cigna"]
+    assert r["value"] is True
+    assert r["source_url"] == "https://cigna.example/find-a-doctor"
+    assert isinstance(r["fetched_at"], float) and r["fetched_at"] > 0
+
+
+@pytest.mark.asyncio
+async def test_estimated_results_carry_no_provenance(temp_db):
+    """An estimate must never acquire a source link/date — that's reserved for
+    verified answers, so an estimate can't masquerade as traceable."""
+    reg = _build()
+    ann = await reg.annotate([{"npi": "9", "stateAb": "CA"}], only=["aetna"])
+    r = ann["9"]["aetna"]
+    assert r["confidence"] == "estimated"
+    assert "source_url" not in r and "fetched_at" not in r
 
 
 # ── A1: presence-only must never become a Confirmed yes ───────────────────────
@@ -321,8 +364,10 @@ async def test_fhir_wired_payer_returns_verified(temp_db, monkeypatch):
     assert cigna_plan["confidence"] == "verified"
 
     ann = await reg.annotate([{"npi": "1003000126", "stateAb": "CA"}], only=["cigna"])
-    assert ann["1003000126"]["cigna"] == {
-        "value": True, "confidence": "verified", "source": "cigna", "level": "payer"}
+    r = ann["1003000126"]["cigna"]
+    assert (r["value"], r["confidence"], r["source"], r["level"]) == (
+        True, "verified", "cigna", "payer")
+    assert r["source_url"] == base and r["fetched_at"] > 0
 
 
 @respx.mock

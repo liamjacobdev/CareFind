@@ -25,6 +25,7 @@ import gzip
 import io
 import json
 import sys
+import time
 
 from . import db
 from .catalog import PAYER_CATALOG
@@ -92,6 +93,9 @@ def ingest(payer: str, src: str) -> int:
                 batch = []
     if batch:
         added += db.tic_add_many(payer, batch)
+    # Provenance: a verified in-network answer for this payer traces back to the TiC
+    # file it was ingested from, with a fetch date (the A3 trust rule).
+    db.source_meta_set(payer, src, time.time())
     return added
 
 
