@@ -27,7 +27,7 @@ from typing import Any
 
 import httpx
 
-from . import db, metrics
+from . import db, metrics, planet_registry
 from .catalog import CATEGORY_ORDER, PAYER_CATALOG, category_label
 from .config import settings
 
@@ -210,6 +210,12 @@ class FhirPlanNetSource(InsuranceSource):
         self.api_key_header = cfg.get("api_key_header")
         self.api_key = cfg.get("api_key")
         self.npi_system = cfg.get("npi_system", "http://hl7.org/fhir/sid/us-npi")
+        # Regional scoping: a regional payer's directory is only queried for providers in
+        # its states. Out-of-state NPIs can't be in-network there, so we return "unknown"
+        # (never a fabricated answer) AND avoid hammering a regional endpoint with NPIs it
+        # can't match. None -> national (query every NPI).
+        states = cfg.get("states")
+        self.states: set[str] | None = {s.upper() for s in states} if states else None
         # A patient-facing verify link: the payer's published directory if given,
         # else the FHIR endpoint we actually queried.
         self.source_url = cfg.get("verify_url") or cfg.get("directory_url") or self.base
@@ -362,6 +368,19 @@ class FhirPlanNetSource(InsuranceSource):
             )
         return out
 
+    async def check_many_ctx(self, contexts: Ctx) -> dict[str, Answer]:
+        """Regional scoping: only live-query providers in this payer's states. A national
+        payer (states is None) queries everyone; a regional one returns "unknown" for
+        out-of-state NPIs without a live call — never a fabricated answer, and no needless
+        load on a regional directory."""
+        if self.states is None:
+            return await self.check_many(list(contexts.keys()))
+        in_state = [npi for npi, ctx in contexts.items()
+                    if (ctx or {}).get("state", "").upper() in self.states]
+        out: dict[str, Answer] = {npi: None for npi in contexts}
+        out.update(await self.check_many(in_state))
+        return out
+
 
 class EstimatedPayerSource(InsuranceSource):
     """A curated major payer (catalog). Estimated tier only.
@@ -409,8 +428,15 @@ class Registry:
 
     def build(self) -> None:
         sources: list[InsuranceSource] = [MedicareSource()]
-        # Verified commercial payers wired via FHIR Plan-Net (payers.json).
-        for cfg in settings.load_payers():
+        # Verified commercial payers wired via FHIR Plan-Net. Operator-configured
+        # payers.json takes precedence; the validated public registry (C1) fills in the
+        # rest so a fresh clone gets verified coverage out of the box. Dedup by id.
+        fhir_cfgs = list(settings.load_payers())
+        configured_ids = {(c or {}).get("id") for c in fhir_cfgs}
+        for cfg in planet_registry.validated_payer_configs():
+            if cfg["id"] not in configured_ids:
+                fhir_cfgs.append(cfg)
+        for cfg in fhir_cfgs:
             try:
                 sources.append(FhirPlanNetSource(cfg))
             except Exception as e:

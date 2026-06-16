@@ -115,6 +115,13 @@ class Settings:
         self.rate_limiter = os.environ.get("CAREFIND_RATE_LIMITER", "memory").strip().lower()
         self.cache_backend = os.environ.get("CAREFIND_CACHE", "memory").strip().lower()
 
+        # Wire the validated public FHIR Plan-Net endpoints (app/planet_registry.py) as
+        # verified filters out of the box. On by default so a fresh clone gets verified
+        # coverage with zero config; tests turn it off for hermeticity and opt in.
+        self.use_planet_registry = os.environ.get(
+            "CAREFIND_USE_PLANET_REGISTRY", "true"
+        ).strip().lower() in ("1", "true", "yes", "on")
+
     def load_payers(self) -> list[dict[str, Any]]:
         """Read payers.json -> list of payer config dicts. Missing file is fine."""
         path = Path(self.payers_file)

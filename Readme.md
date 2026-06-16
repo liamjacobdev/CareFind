@@ -32,35 +32,31 @@ python -m app.ingest_medicare "https://data.cms.gov/.../enrollment.csv"
 
 Re-run quarterly to refresh. After ingest, "Medicare" appears as a verified filter and matching providers show a **Confirmed** badge.
 
-### Source 2 — Commercial networks via FHIR Plan-Net (real, but you wire each payer)
+### Source 2 — Commercial networks via FHIR Plan-Net (real, validated, auto-wired)
 Under the CMS Interoperability rule (CMS-9115-F), Medicare Advantage, Medicaid, and CHIP payers must publish a **public, unauthenticated Provider Directory API** in FHIR R4 (Da Vinci PDEX Plan-Net). CareFind queries it by NPI to confirm network participation.
 
-Copy `payers.example.json` to `payers.json` and add the payers whose networks you want filterable. The example endpoint is real and live:
+The **validated public endpoints** in `app/planet_registry.py` are wired as *Confirmed* filters **out of the box** — no config. `python -m app.verify_payers` live-checks each one and regenerates the provenance ledger ([docs/provenance.md](docs/provenance.md)). To add a payer that isn't in the registry (e.g. one needing a free API key), copy `payers.example.json` to `payers.json`; a payer returns **in-network / not-found / unknown** and CareFind never turns "unknown" into a yes.
 
-```json
-{ "payers": [
-  { "id": "priority_partners", "label": "Priority Partners (JHHP)",
-    "base_url": "https://api.jhhpfhir.com/r4/public-pp",
-    "npi_system": "http://hl7.org/fhir/sid/us-npi" }
-]}
-```
+**What "validated" requires (the trust gate).** It is *not* enough that `/PractitionerRole` returns a Bundle. The validator runs the exact per-NPI lookup the app performs and only wires an endpoint that answers it truthfully **both** ways:
+- a **bogus** NPI must *not* resolve in-network — otherwise the directory ignores the NPI filter and would mark everyone in-network (a fabricated *yes*; e.g. Connecticut's Medicaid directory does this);
+- a **real, listed** NPI must resolve in-network — otherwise per-NPI search returns nothing for everyone (a fabricated *no*; e.g. Premera and the reachable state-Medicaid directories do this).
 
-Some payers ask you to register for a free API key; add `"api_key_header"` and `"api_key"` to that payer's entry if so. A payer returns **in-network / not-found / unknown** — CareFind never turns "unknown" into a yes.
+**Validated public endpoints** (live-checked 2026-06-16; see [docs/provenance.md](docs/provenance.md) for the full, auto-generated ledger including the tracked-but-not-wired ones):
 
-**Validated public endpoints** (live-checked 2026-06-15 — each returned a real `PractitionerRole` Bundle with no auth; record the date you re-check):
-
-| Payer (scope) | catalog mapping | Base URL | Live check |
+| Payer (scope) | catalog id | Base URL | Round-trip |
 |---|---|---|---|
-| Priority Partners — Johns Hopkins (MD Medicaid) | `priority_partners` | `https://api.jhhpfhir.com/r4/public-pp` | Bundle total 83,024 |
-| Premera Blue Cross (WA/AK only) | needs a regional catalog entry — **do not** map to national `bcbs` | `https://opala.tech/provdir/premera/v1/fhir-r4` | Bundle total 94,993 |
+| Priority Partners — Johns Hopkins (MD Medicaid) | `priority_partners` | `https://api.jhhpfhir.com/r4/public-pp` | ✓ bogus→none, listed→in-network (Bundle 83,024) |
+| Johns Hopkins Advantage MD (MD Medicare Advantage) | `advantage_md` | `https://api.jhhpfhir.com/r4/public-ma` | ✓ bogus→none, listed→in-network (Bundle 107,487) |
 
-> **Honest finding on national payers:** the big national carriers in the catalog
-> (UnitedHealthcare, Aetna, Cigna) do **not** expose a clean *public, unauthenticated*
-> Plan-Net `PractitionerRole` endpoint — they gate behind developer registration; Humana
-> publishes one (`https://fhir.humana.com/api`) but it timed out unauthenticated on our
-> check. So the cleanly-wireable endpoints today are **regional** payers. Wire those
-> against a *correctly-scoped* catalog id (don't map a WA/AK payer to national BCBS — that
-> would overclaim). The verified tier grows as you obtain registered access to the nationals.
+> **Honest finding (why only two).** National carriers (UnitedHealthcare, Aetna, Cigna,
+> Humana) gate their Plan-Net behind developer registration. Many *public* directories —
+> Premera, and the reachable State Medicaid directories from the
+> [CMS SMA-Endpoint-Directory](https://github.com/CMSgov/SMA-Endpoint-Directory) — return a
+> Bundle but **fail the per-NPI round-trip** (no network links and/or empty results for
+> listed NPIs), so wiring them would fabricate answers. They stay **estimated**, never
+> verified. The freely-validatable, NPI-usable public set is genuinely small today; the
+> registry + `verify_payers` make growing it turnkey, and an endpoint graduates to
+> *Confirmed* automatically the moment it passes — never by assertion.
 
 ### Source 3 — Transparency-in-Coverage (verified commercial, by ingest)
 Every commercial plan must publish machine-readable in-network files. Ingest a payer's in-network NPIs and that payer becomes a **verified** filter — a *Confirmed* badge that supersedes its estimated catalog entry. The payer id must match a catalog entry (`app/catalog.py`), e.g. `aetna`, `cigna`, `unitedhealthcare`:

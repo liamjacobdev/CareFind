@@ -64,6 +64,9 @@ PAYER_CATALOG: list[dict[str, Any]] = [
     {"id": "priority_partners", "label": "Priority Partners (MD Medicaid)", "category": "medicaid", "states": ["MD"]},
 
     # ── Medicare Advantage (national carriers that sell MA plans) ──
+    # Johns Hopkins Advantage MD — regional MA plan with a live-validated public Plan-Net
+    # endpoint (graduates to verified automatically; see app/planet_registry.py).
+    {"id": "advantage_md", "label": "Johns Hopkins Advantage MD", "category": "medicare_advantage", "states": ["MD"]},
     {"id": "uhc_ma", "label": "UnitedHealthcare (Medicare Advantage)", "category": "medicare_advantage", "states": None},
     {"id": "humana_ma", "label": "Humana (Medicare Advantage)", "category": "medicare_advantage", "states": None},
     {"id": "aetna_ma", "label": "Aetna (Medicare Advantage)", "category": "medicare_advantage", "states": None},
