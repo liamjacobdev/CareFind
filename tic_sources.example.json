@@ -1,5 +1,5 @@
 {
-  "_comment": "Per-payer Transparency-in-Coverage in-network source URLs for the scheduled ingest job (app/ingest_tic_job). Copy to tic_sources.json and fill in each payer's published in-network file URL. 'payer' must match a catalog id in app/catalog.py so the verified ingest supersedes the estimate. Re-run monthly; ingestion is idempotent. Document each URL + retrieval date in the README.",
+  "_comment": "Per-payer Transparency-in-Coverage source URLs for the scheduled ingest job (app/ingest_tic_job). Copy to tic_sources.json and fill in each payer's published URL. The URL may be a single in-network file OR the payer's table-of-contents index — an index is auto-discovered and CareFind fans out across every in-network file it lists (C2), so the easy path is to point at the published TiC root. 'payer' must match a catalog id in app/catalog.py so the verified ingest supersedes the estimate. Re-run monthly; ingestion is idempotent. Document each URL + retrieval date in the README.",
   "sources": [
     {
       "payer": "aetna",

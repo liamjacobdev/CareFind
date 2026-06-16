@@ -29,7 +29,7 @@ import time
 from collections.abc import Iterator
 from typing import Any
 
-from . import db
+from . import db, tic_index
 from .catalog import PAYER_CATALOG
 
 _CATALOG_IDS = {e["id"] for e in PAYER_CATALOG}
@@ -73,19 +73,31 @@ def _npis_from_tic_json(raw: bytes) -> Iterator[Any]:
             yield from grp.get("npi", []) or []
 
 
-def ingest(payer: str, src: str) -> int:
-    if payer not in _CATALOG_IDS:
-        print(f"Warning: '{payer}' is not in app/catalog.py — it won't surface as a "
-              f"named filter until you add it there.", flush=True)
-    db.init_db()
-    raw = _maybe_gunzip(_open_bytes(src), src)
+def _npis_from_raw(raw: bytes) -> Iterator[Any]:
     stripped = raw.lstrip()
     producer = _npis_from_tic_json if stripped[:1] in (b"{", b"[") else _npis_from_text
+    yield from producer(raw)
 
-    seen: set[str] = set()
-    batch: list[str] = []
+
+def _ingest_src(payer: str, src: str, seen: set[str], visited: set[str]) -> int:
+    """Ingest one source. If it's a TiC table-of-contents (C2), fan out across the
+    discovered in-network files; otherwise parse NPIs directly. `seen` dedups NPIs
+    across every file; `visited` guards against an index referencing itself in a cycle."""
+    if src in visited:
+        return 0
+    visited.add(src)
+    raw = _maybe_gunzip(_open_bytes(src), src)
+    refs = tic_index.parse_index(raw)
+    if refs:
+        # A table-of-contents: ingest each discovered in-network file (recursively, so a
+        # nested index also resolves). Surfacing the count of files keeps a large fan-out
+        # observable.
+        print(f"[{payer}] index: discovered {len(refs)} in-network file(s) from {src}", flush=True)
+        return sum(_ingest_src(payer, r.location, seen, visited) for r in refs)
+
     added = 0
-    for npi in producer(raw):
+    batch: list[str] = []
+    for npi in _npis_from_raw(raw):
         npi = str(npi or "").strip()
         if len(npi) == 10 and npi.isdigit() and npi not in seen:
             seen.add(npi)
@@ -95,8 +107,20 @@ def ingest(payer: str, src: str) -> int:
                 batch = []
     if batch:
         added += db.tic_add_many(payer, batch)
+    return added
+
+
+def ingest(payer: str, src: str) -> int:
+    """Ingest a payer's in-network NPIs from `src`, which may be a single in-network
+    file OR a TiC table-of-contents index (auto-discovered and fanned out, C2)."""
+    if payer not in _CATALOG_IDS:
+        print(f"Warning: '{payer}' is not in app/catalog.py — it won't surface as a "
+              f"named filter until you add it there.", flush=True)
+    db.init_db()
+    added = _ingest_src(payer, src, set(), set())
     # Provenance: a verified in-network answer for this payer traces back to the TiC
-    # file it was ingested from, with a fetch date (the A3 trust rule).
+    # source it was ingested from, with a fetch date (the A3 trust rule). For an index,
+    # that's the published root URL the operator configured.
     db.source_meta_set(payer, src, time.time())
     return added
 

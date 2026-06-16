@@ -63,9 +63,16 @@ Every commercial plan must publish machine-readable in-network files. Ingest a p
 
 ```bash
 python -m app.ingest_tic aetna /path/to/aetna_npis.csv
-# accepts a CSV/list of NPIs, or a TiC in-network .json / .json.gz
-python -m app.ingest_tic cigna "https://payer.example/in-network.json.gz"
+# accepts a CSV/list of NPIs, a TiC in-network .json/.json.gz, OR a TiC
+# table-of-contents index — the index is auto-discovered and CareFind fans out
+# across every in-network file it lists, deduping NPIs across them (C2).
+python -m app.ingest_tic cigna "https://payer.example/toc/index.json.gz"
 ```
+
+Pointing the ingest at a payer's **published TiC root** is the easy path: most payers
+publish a table-of-contents (`reporting_structure` → `in_network_files[].location`), and
+CareFind discovers and ingests each file automatically — no need to hand-list every
+in-network URL.
 
 **Scheduled refresh (monthly).** For ongoing operation, list each payer's published
 in-network URL once in `tic_sources.json` (copy `tic_sources.example.json`) and run
