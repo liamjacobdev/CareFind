@@ -19,6 +19,7 @@ monthly cron:
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from . import db, ingest_tic
 from .catalog import PAYER_CATALOG
@@ -28,7 +29,7 @@ from .insurance import Registry
 _CATALOG_IDS = {e["id"] for e in PAYER_CATALOG}
 
 
-def load_sources(path: str = None) -> list:
+def load_sources(path: str | None = None) -> list[dict[str, Any]]:
     """Read tic_sources.json -> [{"payer","url",...}]. Missing file -> []."""
     p = Path(path or settings.tic_sources_file)
     if not p.exists():
@@ -47,7 +48,7 @@ def _is_verified(payer: str) -> bool:
     return any(p["id"] == payer and p["confidence"] == "verified" for p in reg.plans())
 
 
-def ingest_payer(payer: str, url: str) -> dict:
+def ingest_payer(payer: str, url: str) -> dict[str, Any]:
     """Ingest one payer from its source URL/path and report the outcome. Idempotent."""
     if payer not in _CATALOG_IDS:
         print(f"Warning: '{payer}' is not in app/catalog.py — it won't surface as a "
@@ -60,7 +61,7 @@ def ingest_payer(payer: str, url: str) -> dict:
     return {"payer": payer, "added": added, "total": total, "verified": verified}
 
 
-def run(only_payer: str = None, sources_path: str = None) -> list:
+def run(only_payer: str | None = None, sources_path: str | None = None) -> list[dict[str, Any]]:
     """Ingest every configured payer (or just `only_payer`). Returns per-payer results."""
     db.init_db()
     sources = load_sources(sources_path)
@@ -74,7 +75,7 @@ def run(only_payer: str = None, sources_path: str = None) -> list:
         raise SystemExit(
             f"No TiC sources configured. Copy tic_sources.example.json to "
             f"{settings.tic_sources_file} and add each payer's in-network URL.")
-    results = []
+    results: list[dict[str, Any]] = []
     for s in sources:
         payer, url = s.get("payer"), s.get("url")
         if not payer or not url:
@@ -84,7 +85,7 @@ def run(only_payer: str = None, sources_path: str = None) -> list:
     return results
 
 
-def main(argv) -> None:
+def main(argv: list[str]) -> None:
     # Ad-hoc two-arg form: payer + explicit URL/path (no config needed).
     if len(argv) >= 3:
         db.init_db()

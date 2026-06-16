@@ -26,6 +26,8 @@ import io
 import json
 import sys
 import time
+from collections.abc import Iterator
+from typing import Any
 
 from . import db
 from .catalog import PAYER_CATALOG
@@ -48,7 +50,7 @@ def _maybe_gunzip(raw: bytes, src: str) -> bytes:
     return raw
 
 
-def _npis_from_text(raw: bytes):
+def _npis_from_text(raw: bytes) -> Iterator[str]:
     """List/CSV of NPIs: yield any 10-digit numeric token found in an NPI-ish column."""
     text = raw.decode("utf-8-sig", errors="replace")
     sample = text[:4096]
@@ -60,17 +62,15 @@ def _npis_from_text(raw: bytes):
             if idx < len(row):
                 yield row[idx]
     else:
-        for line in text.splitlines():
-            yield line
+        yield from text.splitlines()
 
 
-def _npis_from_tic_json(raw: bytes):
+def _npis_from_tic_json(raw: bytes) -> Iterator[Any]:
     """Collect provider_groups[].npi[] under in_network[] of a TiC file."""
     data = json.loads(raw)
     for item in (data.get("in_network", []) if isinstance(data, dict) else []):
         for grp in item.get("provider_groups", []) or []:
-            for npi in grp.get("npi", []) or []:
-                yield npi
+            yield from grp.get("npi", []) or []
 
 
 def ingest(payer: str, src: str) -> int:
@@ -82,7 +82,9 @@ def ingest(payer: str, src: str) -> int:
     stripped = raw.lstrip()
     producer = _npis_from_tic_json if stripped[:1] in (b"{", b"[") else _npis_from_text
 
-    seen, batch, added = set(), [], 0
+    seen: set[str] = set()
+    batch: list[str] = []
+    added = 0
     for npi in producer(raw):
         npi = str(npi or "").strip()
         if len(npi) == 10 and npi.isdigit() and npi not in seen:
@@ -99,7 +101,7 @@ def ingest(payer: str, src: str) -> int:
     return added
 
 
-def main(argv) -> None:
+def main(argv: list[str]) -> None:
     if len(argv) < 3:
         print(__doc__)
         raise SystemExit(2)

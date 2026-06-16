@@ -17,6 +17,7 @@ Two things live here:
 Verified sources (Medicare file, FHIR Plan-Net endpoints, Transparency-in-Coverage
 ingests) always take precedence over a catalog estimate for the same payer id.
 """
+from typing import Any
 
 # (id, label) in display order. Keep ids stable — they appear in the API + URLs.
 CATEGORIES = [
@@ -37,7 +38,7 @@ def category_label(cid: str) -> str:
 
 
 # Curated estimated-tier payers. `states=None` -> national.
-PAYER_CATALOG = [
+PAYER_CATALOG: list[dict[str, Any]] = [
     # ── National commercial / employer ──
     {"id": "unitedhealthcare", "label": "UnitedHealthcare", "category": "commercial", "states": None},
     {"id": "aetna", "label": "Aetna", "category": "commercial", "states": None},

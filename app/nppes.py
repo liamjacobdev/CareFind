@@ -5,6 +5,8 @@ the public CORS-proxy fallbacks out of the hot path and lets us shape errors.
 The query mapping mirrors the frontend's buildNpiParams() exactly so results are
 identical whether the page runs standalone or backed by this API.
 """
+from typing import Any
+
 import httpx
 
 from .config import settings
@@ -15,7 +17,7 @@ def _wild(value: str) -> str:
     return value + "*" if value else ""
 
 
-def build_params(q: dict) -> dict:
+def build_params(q: dict[str, Any]) -> dict[str, Any]:
     """Translate the frontend's search fields into NPPES query parameters.
 
     Raises ValueError when the query is too empty for NPPES to accept it.
@@ -28,7 +30,7 @@ def build_params(q: dict) -> dict:
     except (TypeError, ValueError):
         limit = 25
 
-    params: dict = {"version": "2.1", "limit": limit, "skip": 0}
+    params: dict[str, Any] = {"version": "2.1", "limit": limit, "skip": 0}
 
     if npi:
         if not (npi.isdigit() and len(npi) == 10):
@@ -87,7 +89,7 @@ def build_params(q: dict) -> dict:
     return params
 
 
-async def search(q: dict) -> list:
+async def search(q: dict[str, Any]) -> list[Any]:
     """Return the raw NPPES `results` list (the frontend/normalizer consumes it)."""
     import asyncio
 
@@ -108,9 +110,11 @@ async def search(q: dict) -> list:
                 if attempt == 0:
                     await asyncio.sleep(0.8)
         else:
+            assert last_exc is not None
             raise last_exc
 
     if isinstance(data, dict) and data.get("Errors"):
         # NPPES reports bad queries in an Errors array — surface as a 400.
         raise ValueError(data["Errors"][0].get("description", "The registry rejected the query."))
-    return data.get("results", []) if isinstance(data, dict) else []
+    out = data.get("results", []) if isinstance(data, dict) else []
+    return out if isinstance(out, list) else []

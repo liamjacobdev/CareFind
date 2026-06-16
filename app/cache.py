@@ -6,8 +6,11 @@ CAREFIND_CACHE (see build_cache). Used by the short-TTL NPPES result cache (C4).
 """
 import threading
 import time
+from collections.abc import Callable
+from typing import Any
 
 from .config import settings
+from .interfaces import CacheBackend
 
 
 class InProcessTTLCache:
@@ -15,13 +18,13 @@ class InProcessTTLCache:
     opportunistically once the store grows past a soft cap, so a long-lived process
     can't accumulate stale keys without bound."""
 
-    def __init__(self, *, max_entries: int = 2048, now=time.monotonic):
-        self._store: dict = {}          # key -> (expires_at, value)
+    def __init__(self, *, max_entries: int = 2048, now: Callable[[], float] = time.monotonic) -> None:
+        self._store: dict[str, tuple[float, Any]] = {}   # key -> (expires_at, value)
         self._lock = threading.Lock()
         self._max = max_entries
         self._now = now
 
-    def get(self, key: str):
+    def get(self, key: str) -> Any:
         now = self._now()
         with self._lock:
             row = self._store.get(key)
@@ -33,7 +36,7 @@ class InProcessTTLCache:
                 return None
             return value
 
-    def set(self, key: str, value, ttl: float) -> None:
+    def set(self, key: str, value: Any, ttl: float) -> None:
         now = self._now()
         with self._lock:
             if len(self._store) >= self._max:
@@ -55,14 +58,14 @@ class InProcessTTLCache:
 class NoopCache:
     """Caches nothing — every get is a miss. The shape a no-op swap must satisfy."""
 
-    def get(self, key: str):
+    def get(self, key: str) -> Any:
         return None
 
-    def set(self, key: str, value, ttl: float) -> None:
+    def set(self, key: str, value: Any, ttl: float) -> None:
         pass
 
 
-def build_cache():
+def build_cache() -> CacheBackend:
     """Select the cache backend from config. Defaults to the in-process TTL cache."""
     kind = settings.cache_backend
     if kind == "noop":

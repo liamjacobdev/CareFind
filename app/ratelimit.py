@@ -6,9 +6,10 @@ CAREFIND_RATE_LIMITER (see build_rate_limiter); no call-site change needed.
 """
 import time
 from collections import defaultdict, deque
+from collections.abc import Callable
 
 from .config import settings
-from .interfaces import RateDecision
+from .interfaces import RateDecision, RateLimiter
 
 
 class InProcessRateLimiter:
@@ -20,8 +21,8 @@ class InProcessRateLimiter:
     monotonic clock.
     """
 
-    def __init__(self, *, now=time.monotonic):
-        self._hits: dict = defaultdict(deque)
+    def __init__(self, *, now: Callable[[], float] = time.monotonic) -> None:
+        self._hits: dict[str, deque[float]] = defaultdict(deque)
         self._last_sweep = 0.0
         self._now = now
 
@@ -56,7 +57,7 @@ class NoopRateLimiter:
         return RateDecision(True)
 
 
-def build_rate_limiter():
+def build_rate_limiter() -> RateLimiter:
     """Select the rate limiter from config. Defaults to in-process."""
     kind = settings.rate_limiter
     if kind == "noop":

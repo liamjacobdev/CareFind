@@ -60,7 +60,8 @@ async def test_regional_payer_state_scoped_and_graduates_when_wired(temp_db, mon
         {"id": "premera_bcbs", "label": "Premera", "base_url": base, "category": "commercial"}])
     with respx.mock:
         respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(200, json=_IN_NETWORK))
-        reg2 = Registry(); reg2.build()
+        reg2 = Registry()
+        reg2.build()
         ann2 = await reg2.annotate([{"npi": "1", "stateAb": "WA"}], only=["premera_bcbs"])
     r = ann2["1"]["premera_bcbs"]
     assert (r["value"], r["confidence"], r["source"], r["level"]) == (
@@ -190,7 +191,8 @@ async def test_verified_fhir_carries_per_npi_provenance(temp_db, monkeypatch):
         "id": "cigna", "label": "Cigna", "base_url": base,
         "verify_url": "https://cigna.example/find-a-doctor"}])
     respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(200, json=_IN_NETWORK))
-    reg = Registry(); reg.build()
+    reg = Registry()
+    reg.build()
     ann = await reg.annotate([{"npi": "1111111111", "stateAb": "CA"}], only=["cigna"])
     r = ann["1111111111"]["cigna"]
     assert r["value"] is True

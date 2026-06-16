@@ -6,9 +6,11 @@ by a process-level lock to avoid 'database is locked' under light concurrency.
 """
 import sqlite3
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 
 from .config import settings
+from .interfaces import Datastore
 
 _write_lock = threading.Lock()
 
@@ -20,7 +22,7 @@ def _connect() -> sqlite3.Connection:
 
 
 @contextmanager
-def _conn():
+def _conn() -> Iterator[sqlite3.Connection]:
     conn = _connect()
     try:
         yield conn
@@ -101,9 +103,9 @@ def medicare_has(npi: str) -> bool:
         return row is not None
 
 
-def medicare_has_many(npis: list) -> set:
+def medicare_has_many(npis: list[str]) -> set[str]:
     """Return the subset of `npis` present in the Medicare index."""
-    present: set = set()
+    present: set[str] = set()
     if not npis:
         return present
     with _conn() as conn:
@@ -117,7 +119,7 @@ def medicare_has_many(npis: list) -> set:
     return present
 
 
-def medicare_add_many(npis) -> int:
+def medicare_add_many(npis: list[str]) -> int:
     rows = [(str(n).strip(),) for n in npis if str(n).strip()]
     if not rows:
         return 0
@@ -143,9 +145,9 @@ def tic_has(payer: str, npi: str) -> bool:
         return row is not None
 
 
-def tic_has_many(payer: str, npis: list) -> set:
+def tic_has_many(payer: str, npis: list[str]) -> set[str]:
     """Return the subset of `npis` listed in-network for `payer`."""
-    present: set = set()
+    present: set[str] = set()
     if not npis:
         return present
     with _conn() as conn:
@@ -160,7 +162,7 @@ def tic_has_many(payer: str, npis: list) -> set:
     return present
 
 
-def tic_add_many(payer: str, npis) -> int:
+def tic_add_many(payer: str, npis: list[str]) -> int:
     rows = [(str(payer), str(n).strip()) for n in npis if str(n).strip()]
     if not rows:
         return 0
@@ -170,7 +172,7 @@ def tic_add_many(payer: str, npis) -> int:
 
 
 # ── Geocode cache ───────────────────────────────────────────────────────────
-def geocode_get(key: str):
+def geocode_get(key: str) -> list[float] | None:
     with _conn() as conn:
         row = conn.execute("SELECT lat, lon FROM geocache WHERE key = ?", (key,)).fetchone()
         if row and row["lat"] is not None:
@@ -178,7 +180,7 @@ def geocode_get(key: str):
     return None
 
 
-def geocode_set(key: str, lat, lon) -> None:
+def geocode_set(key: str, lat: float, lon: float) -> None:
     with _write_lock, _conn() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO geocache (key, lat, lon) VALUES (?, ?, ?)",
@@ -187,7 +189,7 @@ def geocode_set(key: str, lat, lon) -> None:
 
 
 # ── Reverse-geocode cache (coords -> ZIP) ─────────────────────────────────────
-def revgeocode_get(key: str):
+def revgeocode_get(key: str) -> str | None:
     """Return the cached ZIP string for a coordinate key, or None if not cached.
     An empty-string value is a real cached 'no ZIP here' answer and is returned
     as such, so we don't re-hit the network for a known miss."""
@@ -207,7 +209,7 @@ def revgeocode_set(key: str, postcode: str) -> None:
 
 
 # ── FHIR Plan-Net result cache ────────────────────────────────────────────────
-def fhir_cache_get(payer: str, npi: str):
+def fhir_cache_get(payer: str, npi: str) -> tuple[str, float] | None:
     """Return (value_str, fetched_at) for a cached FHIR result, or None if absent.
     Freshness/TTL is the caller's call (it knows the per-state TTLs); this just
     reads the row."""
@@ -221,9 +223,9 @@ def fhir_cache_get(payer: str, npi: str):
     return None
 
 
-def fhir_cache_get_many(payer: str, npis) -> dict:
+def fhir_cache_get_many(payer: str, npis: list[str]) -> dict[str, tuple[str, float]]:
     """Batch read: {npi: (value_str, fetched_at)} for the cached subset of `npis`."""
-    out: dict = {}
+    out: dict[str, tuple[str, float]] = {}
     npis = [str(n) for n in npis]
     if not npis:
         return out
@@ -249,7 +251,7 @@ def fhir_cache_set(payer: str, npi: str, value: str, fetched_at: float) -> None:
         )
 
 
-def fhir_cache_set_many(payer: str, items, fetched_at: float) -> int:
+def fhir_cache_set_many(payer: str, items: list[tuple[str, str]], fetched_at: float) -> int:
     """items: iterable of (npi, value_str). Bulk upsert with one timestamp."""
     rows = [(str(payer), str(n), v, float(fetched_at)) for n, v in items]
     if not rows:
@@ -274,7 +276,7 @@ def source_meta_set(source_id: str, source_url: str, fetched_at: float) -> None:
         )
 
 
-def source_meta_get(source_id: str):
+def source_meta_get(source_id: str) -> tuple[str, float] | None:
     """Return (source_url, fetched_at) for a source, or None if never recorded."""
     with _conn() as conn:
         row = conn.execute(
@@ -316,22 +318,22 @@ class SqliteDatastore:
     source_meta_get = staticmethod(source_meta_get)
 
 
-def build_datastore():
+def build_datastore() -> Datastore:
     """Select the datastore from config. Defaults to SQLite (the only $0 option today;
     a Postgres impl satisfying the Datastore protocol slots in here for D4)."""
     # settings.datastore is validated to a known value; unknown -> SQLite default.
     return SqliteDatastore()
 
 
-_active = build_datastore()
+_active: Datastore = build_datastore()
 
 
-def get_datastore():
+def get_datastore() -> Datastore:
     """The active datastore. Swappable via use_datastore() (e.g. in tests or D4)."""
     return _active
 
 
-def use_datastore(ds) -> None:
+def use_datastore(ds: Datastore) -> None:
     """Swap the active datastore. The default SQLite impl is restored with
     use_datastore(build_datastore())."""
     global _active

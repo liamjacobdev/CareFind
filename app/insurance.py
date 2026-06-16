@@ -22,6 +22,8 @@ Per-provider results have the shape:
 import asyncio
 import logging
 import time
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 
@@ -30,6 +32,11 @@ from .catalog import CATEGORY_ORDER, PAYER_CATALOG, category_label
 from .config import settings
 
 log = logging.getLogger("carefind.insurance")
+
+# A single source's answer for one (provider, plan): in-network / not / unknown.
+Answer = bool | None
+# Per-provider lookup context: {npi: {"state": str, ...}}.
+Ctx = dict[str, dict[str, Any]]
 
 # Highest-confidence wins when several sources answer for one plan.
 _CONFIDENCE_RANK = {"verified": 2, "estimated": 1}
@@ -57,18 +64,18 @@ def _fhir_cache_fresh(value_str: str, fetched_at: float) -> bool:
 _AVAILABILITY_TTL = 5.0
 
 
-def _ttl_available(holder, compute) -> bool:
+def _ttl_available(holder: Any, compute: Callable[[], object]) -> bool:
     """Memoize holder._avail = (value, expires_at) for _AVAILABILITY_TTL seconds."""
     val, exp = holder._avail
     now = time.monotonic()
     if now < exp:
-        return val
+        return bool(val)
     try:
         val = bool(compute())
     except Exception:
         val = False
     holder._avail = (val, now + _AVAILABILITY_TTL)
-    return val
+    return bool(val)
 
 
 class InsuranceSource:
@@ -100,7 +107,7 @@ class InsuranceSource:
         """
         return True
 
-    def provenance_many(self, npis: list) -> dict:
+    def provenance_many(self, npis: list[str]) -> dict[str, dict[str, Any]]:
         """{str(npi): {"source_url": str, "fetched_at": float|None}} for these NPIs.
 
         Provenance only exists for verified sources; the estimated/base tier returns
@@ -108,13 +115,13 @@ class InsuranceSource:
         """
         return {}
 
-    async def check(self, npi: str):
+    async def check(self, npi: str) -> Answer:
         return None
 
-    async def check_many(self, npis: list) -> dict:
+    async def check_many(self, npis: list[str]) -> dict[str, Answer]:
         return {npi: await self.check(npi) for npi in npis}
 
-    async def check_many_ctx(self, contexts: dict) -> dict:
+    async def check_many_ctx(self, contexts: Ctx) -> dict[str, Answer]:
         """contexts: {npi: {"state": str, ...}}. Default ignores context."""
         return await self.check_many(list(contexts.keys()))
 
@@ -130,22 +137,22 @@ class MedicareSource(InsuranceSource):
     # confirmation, not a "listed in a payer's network" signal.
     level = "plan"
 
-    def __init__(self):
-        self._avail = (False, 0.0)
+    def __init__(self) -> None:
+        self._avail: tuple[bool, float] = (False, 0.0)
 
     def available(self) -> bool:
         return _ttl_available(self, lambda: db.medicare_count() > 0)
 
-    async def check(self, npi: str):
+    async def check(self, npi: str) -> Answer:
         return db.medicare_has(npi) if self.available() else None
 
-    async def check_many(self, npis: list) -> dict:
+    async def check_many(self, npis: list[str]) -> dict[str, Answer]:
         if not self.available():
             return {n: None for n in npis}
         present = db.medicare_has_many(npis)
         return {n: (n in present) for n in npis}
 
-    def provenance_many(self, npis: list) -> dict:
+    def provenance_many(self, npis: list[str]) -> dict[str, dict[str, Any]]:
         meta = db.source_meta_get("medicare")
         if not meta:
             return {}
@@ -162,26 +169,26 @@ class TicSource(InsuranceSource):
     confidence = "verified"
     kind = "commercial"
 
-    def __init__(self, payer_id: str, label: str, category: str = "commercial"):
+    def __init__(self, payer_id: str, label: str, category: str = "commercial") -> None:
         self.id = payer_id
         self.payer = payer_id
         self.label = label
         self.category = category
-        self._avail = (False, 0.0)
+        self._avail: tuple[bool, float] = (False, 0.0)
 
     def available(self) -> bool:
         return _ttl_available(self, lambda: db.tic_count(self.id) > 0)
 
-    async def check(self, npi: str):
+    async def check(self, npi: str) -> Answer:
         return db.tic_has(self.id, npi) if self.available() else None
 
-    async def check_many(self, npis: list) -> dict:
+    async def check_many(self, npis: list[str]) -> dict[str, Answer]:
         if not self.available():
             return {n: None for n in npis}
         present = db.tic_has_many(self.id, npis)
         return {n: (n in present) for n in npis}
 
-    def provenance_many(self, npis: list) -> dict:
+    def provenance_many(self, npis: list[str]) -> dict[str, dict[str, Any]]:
         meta = db.source_meta_get(self.id)
         if not meta:
             return {}
@@ -194,7 +201,7 @@ class FhirPlanNetSource(InsuranceSource):
     confidence = "verified"
     kind = "commercial"
 
-    def __init__(self, cfg: dict):
+    def __init__(self, cfg: dict[str, Any]) -> None:
         self.id = cfg["id"]
         self.label = cfg.get("label", cfg["id"])
         self.payer = cfg.get("payer", cfg["id"])
@@ -210,25 +217,25 @@ class FhirPlanNetSource(InsuranceSource):
     def available(self) -> bool:
         return bool(self.base)
 
-    def provenance_many(self, npis: list) -> dict:
+    def provenance_many(self, npis: list[str]) -> dict[str, dict[str, Any]]:
         """Per-NPI provenance: the fetch date is the cache row's timestamp (when this
         provider's network status was actually read from the live endpoint)."""
         rows = db.fhir_cache_get_many(self.id, npis)
-        out = {}
+        out: dict[str, dict[str, Any]] = {}
         for n in npis:
             row = rows.get(str(n))
             out[str(n)] = {"source_url": self.source_url,
                            "fetched_at": row[1] if row else None}
         return out
 
-    def _headers(self):
+    def _headers(self) -> dict[str, str]:
         h = {"Accept": "application/fhir+json", "User-Agent": settings.contact_ua}
         if self.api_key_header and self.api_key:
             h[self.api_key_header] = self.api_key
         return h
 
     @staticmethod
-    def _has_network_link(res: dict) -> bool:
+    def _has_network_link(res: dict[str, Any]) -> bool:
         """True only if this PractitionerRole carries a *resolvable network reference*.
 
         In FHIR Plan-Net a provider's participation is asserted by linking the role to
@@ -251,7 +258,7 @@ class FhirPlanNetSource(InsuranceSource):
         return False
 
     @classmethod
-    def _in_network(cls, bundle: dict, strictness: str | None = None):
+    def _in_network(cls, bundle: dict[str, Any], strictness: str | None = None) -> Answer:
         """Map a PractitionerRole Bundle to True / False / None (unknown).
 
         Trust invariant: directory *presence* alone never becomes a Confirmed "yes".
@@ -285,7 +292,7 @@ class FhirPlanNetSource(InsuranceSource):
             return None  # listed, but presence alone can't confirm in-network
         return False  # not in the directory at all
 
-    async def _check(self, client: httpx.AsyncClient, npi: str):
+    async def _check(self, client: httpx.AsyncClient, npi: str) -> Answer:
         url = f"{self.base}/PractitionerRole"
         params = {"practitioner.identifier": f"{self.npi_system}|{npi}", "_count": "5"}
         try:
@@ -303,24 +310,24 @@ class FhirPlanNetSource(InsuranceSource):
             return None
         return self._in_network(bundle)
 
-    async def check(self, npi: str):
+    async def check(self, npi: str) -> Answer:
         # Route through the cached batch path so a single lookup is cached too.
         return (await self.check_many([npi])).get(npi)
 
-    async def check_many(self, npis: list) -> dict:
+    async def check_many(self, npis: list[str]) -> dict[str, Answer]:
         """Concurrent, bounded, and cached — so N payers x N providers can't serialize
         into a request timeout, and a warm search makes zero live FHIR calls.
 
         Fresh cache hits are served from SQLite; only the misses (and stale rows) hit
         the live endpoint, and their results are persisted. A cached 'unknown' is
         re-fetched after a short TTL and is never treated as 'not in network'."""
-        out = {n: None for n in npis}
+        out: dict[str, Answer] = {n: None for n in npis}
         if not npis:
             return out
 
         # 1) Serve fresh cache hits; collect the rest to fetch live.
         cached = db.fhir_cache_get_many(self.id, npis)
-        to_fetch = []
+        to_fetch: list[str] = []
         for n in npis:
             row = cached.get(str(n))
             if row is not None:
@@ -337,13 +344,13 @@ class FhirPlanNetSource(InsuranceSource):
         # 2) Fetch the misses live, bounded-concurrently, then persist every result
         #    (including 'unknown', so a flapping endpoint isn't hammered every search).
         sem = asyncio.Semaphore(8)
-        fetched = {}
+        fetched: dict[str, Answer] = {}
         async with httpx.AsyncClient(timeout=12) as client:
-            async def one(n):
+            async def one(n: str) -> tuple[str, Answer]:
                 async with sem:
                     return n, await self._check(client, n)
             for res in await asyncio.gather(*[one(n) for n in to_fetch], return_exceptions=True):
-                if isinstance(res, Exception):
+                if isinstance(res, BaseException):
                     continue
                 n, v = res
                 out[n] = v
@@ -365,14 +372,14 @@ class EstimatedPayerSource(InsuranceSource):
     """
     confidence = "estimated"
 
-    def __init__(self, entry: dict):
+    def __init__(self, entry: dict[str, Any]) -> None:
         self.id = entry["id"]
         self.payer = entry["id"]
         self.label = entry["label"]
         self.category = entry.get("category", "commercial")
         self.kind = "commercial"
         states = entry.get("states")
-        self.states = set(states) if states else None  # None -> national
+        self.states: set[str] | None = set(states) if states else None  # None -> national
 
     def available(self) -> bool:
         return True
@@ -389,7 +396,7 @@ class EstimatedPayerSource(InsuranceSource):
             return True
         return bool(state) and state.upper() in self.states
 
-    async def check_many_ctx(self, contexts: dict) -> dict:
+    async def check_many_ctx(self, contexts: Ctx) -> dict[str, Answer]:
         return {
             npi: (True if self._serves((ctx or {}).get("state", "")) else None)
             for npi, ctx in contexts.items()
@@ -397,11 +404,11 @@ class EstimatedPayerSource(InsuranceSource):
 
 
 class Registry:
-    def __init__(self):
-        self.sources = []
+    def __init__(self) -> None:
+        self.sources: list[InsuranceSource] = []
 
-    def build(self):
-        sources = [MedicareSource()]
+    def build(self) -> None:
+        sources: list[InsuranceSource] = [MedicareSource()]
         # Verified commercial payers wired via FHIR Plan-Net (payers.json).
         for cfg in settings.load_payers():
             try:
@@ -424,18 +431,18 @@ class Registry:
             sources.append(EstimatedPayerSource(entry))
         self.sources = sources
 
-    def available(self):
+    def available(self) -> list[InsuranceSource]:
         return [s for s in self.sources if s.available()]
 
-    def _sources_by_plan(self):
-        by_plan = {}
+    def _sources_by_plan(self) -> dict[str, list[InsuranceSource]]:
+        by_plan: dict[str, list[InsuranceSource]] = {}
         for s in self.available():
             by_plan.setdefault(s.id, []).append(s)
         return by_plan
 
-    def plans(self):
+    def plans(self) -> list[dict[str, Any]]:
         """Flat list of filterable plans, best confidence per plan id."""
-        out = []
+        out: list[dict[str, Any]] = []
         for plan_id, srcs in self._sources_by_plan().items():
             best = max(srcs, key=lambda s: _CONFIDENCE_RANK.get(s.confidence, 0))
             out.append({
@@ -446,41 +453,43 @@ class Registry:
         out.sort(key=lambda p: (CATEGORY_ORDER.get(p["category"], 99), p["label"].lower()))
         return out
 
-    def categories(self):
+    def categories(self) -> list[dict[str, Any]]:
         """Plans grouped by coverage category, in canonical display order."""
-        groups = {}
+        groups: dict[str, list[dict[str, Any]]] = {}
         for p in self.plans():
             groups.setdefault(p["category"], []).append(p)
         ordered = sorted(groups.items(), key=lambda kv: CATEGORY_ORDER.get(kv[0], 99))
         return [{"id": cid, "label": category_label(cid), "plans": plans} for cid, plans in ordered]
 
-    async def check_all(self, npi: str, state: str = "") -> dict:
+    async def check_all(self, npi: str, state: str = "") -> dict[str, Any]:
         """Single-NPI lookup. Without provider context, estimates stay unknown."""
         ann = await self.annotate([{"npi": npi, "state": state}])
         return ann.get(npi, {})
 
-    async def annotate(self, providers: list, only=None) -> dict:
+    async def annotate(
+        self, providers: list[dict[str, Any]], only: list[str] | None = None
+    ) -> dict[str, dict[str, Any]]:
         """providers: [{"npi":..., "state":...}] -> {npi: {plan_id: {value,confidence,source}}}.
 
         For each plan id, the best available answer across its sources wins:
         a verified True/False beats an estimate; an estimated True beats nothing.
         """
-        contexts = {}
+        contexts: Ctx = {}
         for p in providers:
             npi = p.get("npi")
             if npi:
                 contexts[npi] = {"state": p.get("state") or p.get("stateAb") or ""}
         npis = list(contexts.keys())
-        result = {npi: {} for npi in npis}
+        result: dict[str, dict[str, Any]] = {npi: {} for npi in npis}
         # Verified winners grouped by their source, so provenance is fetched once per
         # source rather than per result.
-        verified_by_source: dict = {}
+        verified_by_source: dict[InsuranceSource, list[tuple[str, str]]] = {}
 
         for plan_id, srcs in self._sources_by_plan().items():
             if only and plan_id not in only:
                 continue
             # Query each source for this plan; merge by confidence then definiteness.
-            per_source = []
+            per_source: list[tuple[InsuranceSource, dict[str, Answer]]] = []
             for s in srcs:
                 try:
                     per_source.append((s, await s.check_many_ctx(contexts)))
@@ -491,7 +500,7 @@ class Registry:
                                 s.id, len(npis), type(e).__name__, e)
                     per_source.append((s, {n: None for n in npis}))
             for npi in npis:
-                best = None  # (rank, definite, value, source)
+                best: tuple[int, int, Answer, InsuranceSource] | None = None
                 for s, m in per_source:
                     v = m.get(npi)
                     if v is None:

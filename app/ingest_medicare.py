@@ -11,6 +11,8 @@ import csv
 import io
 import sys
 import time
+from collections.abc import Iterable
+from typing import TextIO
 
 from . import db
 
@@ -22,7 +24,7 @@ CMS_ENROLLMENT_URL = (
 )
 
 
-def _open_source(src: str):
+def _open_source(src: str) -> TextIO:
     if src.startswith(("http://", "https://")):
         from .download import stream_to_spool
         print(f"Downloading {src} ...", flush=True)
@@ -31,10 +33,10 @@ def _open_source(src: str):
         spool = stream_to_spool(src)  # bounded by settings.ingest_max_bytes
         return io.TextIOWrapper(spool, encoding="utf-8-sig", newline="")
     # utf-8-sig strips the BOM CMS exports sometimes carry.
-    return open(src, "r", encoding="utf-8-sig", newline="")
+    return open(src, encoding="utf-8-sig", newline="")
 
 
-def _find_npi_field(fieldnames) -> str:
+def _find_npi_field(fieldnames: Iterable[str] | None) -> str:
     for f in fieldnames or []:
         if f and f.strip().upper().replace(" ", "_") in ("NPI", "NPI_NUMBER"):
             return f
@@ -53,8 +55,8 @@ def ingest(src: str) -> int:
         if not npi_field:
             raise SystemExit(f"No NPI column found. Columns seen: {reader.fieldnames}")
 
-        seen: set = set()
-        batch: list = []
+        seen: set[str] = set()
+        batch: list[str] = []
         added = 0
         for row in reader:
             npi = (row.get(npi_field) or "").strip()
@@ -76,7 +78,7 @@ def ingest(src: str) -> int:
         fh.close()
 
 
-def main(argv) -> None:
+def main(argv: list[str]) -> None:
     if len(argv) < 2:
         print(__doc__)
         raise SystemExit(2)

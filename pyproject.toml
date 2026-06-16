@@ -1,0 +1,28 @@
+# Tooling config. Tests still run via pytest.ini; this file holds lint + type config.
+
+[tool.ruff]
+# The backend favors dense, readable single-line helpers; a generous line length keeps
+# them intact rather than fighting the style. The linter still enforces real issues.
+line-length = 120
+target-version = "py312"
+extend-exclude = ["carefind.bundle.js"]
+
+[tool.ruff.lint]
+# Real-bug + hygiene rules: pyflakes (F), pycodestyle (E/W), import order (I),
+# bugbear (B), pyupgrade (UP), comprehensions (C4). Not opinionated formatting.
+select = ["F", "E", "W", "I", "B", "UP", "C4"]
+ignore = [
+  "E501",  # line length is governed by line-length above, not hard-failed
+  "B008",  # FastAPI dependency-injection idiom uses callables in arg defaults
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+# Third-party libs without bundled stubs (respx is test-only; httpx ships types).
+ignore_missing_imports = true
+files = ["app"]
+# Pydantic models and FastAPI decorators are dynamically typed at the edges; keep the
+# strict bar everywhere we own the code.
+warn_unused_ignores = true
+warn_redundant_casts = true

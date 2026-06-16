@@ -7,6 +7,7 @@ the entries in payers.json.
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 # The shipped default User-Agent. Nominatim's free usage policy rejects placeholder/
 # templated agents (HTTP 403), so this only matters for the optional Nominatim
@@ -15,7 +16,7 @@ _DEFAULT_UA = "CareFind/3.1 self-hosted (single-user; set CAREFIND_UA with your 
 
 
 class Settings:
-    def __init__(self):
+    def __init__(self) -> None:
         # SQLite file holding the Medicare index + geocode cache. Keep it on a
         # persistent volume in production so both survive restarts.
         self.db_path = os.environ.get("CAREFIND_DB", "./carefind.db")
@@ -114,7 +115,7 @@ class Settings:
         self.rate_limiter = os.environ.get("CAREFIND_RATE_LIMITER", "memory").strip().lower()
         self.cache_backend = os.environ.get("CAREFIND_CACHE", "memory").strip().lower()
 
-    def load_payers(self) -> list:
+    def load_payers(self) -> list[dict[str, Any]]:
         """Read payers.json -> list of payer config dicts. Missing file is fine."""
         path = Path(self.payers_file)
         if not path.exists():

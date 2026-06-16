@@ -17,6 +17,7 @@ import asyncio
 import logging
 import math
 import time
+from typing import Any
 
 import httpx
 
@@ -25,11 +26,14 @@ from .config import settings
 
 log = logging.getLogger("carefind.geocode")
 
+# [lat, lon]. A list (not a tuple) because it round-trips through JSON and the cache.
+Coords = list[float]
+
 _rate_lock = asyncio.Lock()
 _last_call = 0.0
 
 
-def haversine_miles(a, b) -> float:
+def haversine_miles(a: Coords, b: Coords) -> float:
     """Great-circle distance in miles between [lat, lon] pairs."""
     r = 3958.8
     lat1, lon1, lat2, lon2 = map(math.radians, [a[0], a[1], b[0], b[1]])
@@ -52,7 +56,7 @@ def active_geocoder() -> str:
 
 
 # ── US Census Geocoder (primary; free, keyless, no contact header, US-only) ──
-async def _census_search(client: httpx.AsyncClient, q: str):
+async def _census_search(client: httpx.AsyncClient, q: str) -> Coords | None:
     resp = await client.get(
         settings.census_base + "/geocoder/locations/onelineaddress",
         params={"benchmark": "Public_AR_Current", "format": "json", "address": q},
@@ -81,7 +85,7 @@ async def _throttle() -> None:
         _last_call = time.monotonic()
 
 
-async def _nominatim_search(client: httpx.AsyncClient, q: str):
+async def _nominatim_search(client: httpx.AsyncClient, q: str) -> Coords | None:
     await _throttle()
     resp = await client.get(
         settings.nominatim_base + "/search",
@@ -95,7 +99,7 @@ async def _nominatim_search(client: httpx.AsyncClient, q: str):
     return None
 
 
-async def _geocode_live(client: httpx.AsyncClient, q: str):
+async def _geocode_live(client: httpx.AsyncClient, q: str) -> Coords | None:
     """Resolve one address through the source chain: Census first, Nominatim on a
     miss/error. Returns [lat, lon] or None — never a fabricated coordinate."""
     if census_enabled():
@@ -114,7 +118,7 @@ async def _geocode_live(client: httpx.AsyncClient, q: str):
         return None
 
 
-async def geocode_one(q: str):
+async def geocode_one(q: str) -> Coords | None:
     if not q or not q.strip():
         return None
     key = _key(q)
@@ -134,7 +138,9 @@ async def geocode_one(q: str):
     return coords
 
 
-async def geocode_batch(items: list, budget_seconds: float = None) -> dict:
+async def geocode_batch(
+    items: list[dict[str, Any]], budget_seconds: float | None = None
+) -> dict[str, Coords]:
     """items: [{"key": str, "q": str}] -> {key: [lat, lon]} for everything found.
 
     Cache hits are always returned. Misses are resolved live until `budget_seconds`
@@ -144,8 +150,8 @@ async def geocode_batch(items: list, budget_seconds: float = None) -> dict:
     concurrently (it has no rate limit); the Nominatim fallback is serialized by its
     own throttle regardless of the concurrency here.
     """
-    out: dict = {}
-    pending = []
+    out: dict[str, Coords] = {}
+    pending: list[tuple[str, str]] = []
     for item in items or []:
         k, q = item.get("key"), item.get("q")
         if not k or not q:
@@ -164,7 +170,7 @@ async def geocode_batch(items: list, budget_seconds: float = None) -> dict:
     start = time.monotonic()
     sem = asyncio.Semaphore(8)
 
-    async def one(client, k, q):
+    async def one(client: httpx.AsyncClient, k: str, q: str) -> tuple[str, Coords | None]:
         async with sem:
             if budget_seconds is not None and (time.monotonic() - start) >= budget_seconds:
                 return k, None
@@ -178,7 +184,7 @@ async def geocode_batch(items: list, budget_seconds: float = None) -> dict:
             *[one(client, k, q) for k, q in pending], return_exceptions=True
         )
     for res in results:
-        if isinstance(res, Exception):
+        if isinstance(res, BaseException):
             continue
         k, coords = res
         if coords:
@@ -187,13 +193,13 @@ async def geocode_batch(items: list, budget_seconds: float = None) -> dict:
 
 
 # ── Reverse geocoding (coords -> ZIP, for 'Near me') ──────────────────────────
-def _rev_key(lat, lon) -> str:
+def _rev_key(lat: float, lon: float) -> str:
     """Cache key for a coordinate. Rounded to ~11 m so the cache survives the tiny
     jitter between successive browser geolocation fixes; ZIP areas are far larger."""
     return f"{float(lat):.4f},{float(lon):.4f}"
 
 
-async def _census_reverse(client: httpx.AsyncClient, lat, lon) -> str:
+async def _census_reverse(client: httpx.AsyncClient, lat: float, lon: float) -> str:
     """Keyless ZIP lookup via the Census geographies/coordinates benchmark — mirrors
     the forward Census path so 'Near me' works out of the box with no CAREFIND_UA.
     The ZIP Code Tabulation Area (ZCTA5) is the ZIP for this point."""
@@ -219,7 +225,7 @@ async def _census_reverse(client: httpx.AsyncClient, lat, lon) -> str:
     return ""
 
 
-async def _nominatim_reverse(client: httpx.AsyncClient, lat, lon) -> str:
+async def _nominatim_reverse(client: httpx.AsyncClient, lat: float, lon: float) -> str:
     await _throttle()
     resp = await client.get(
         settings.nominatim_base + "/reverse",
@@ -233,7 +239,7 @@ async def _nominatim_reverse(client: httpx.AsyncClient, lat, lon) -> str:
     return ""
 
 
-async def reverse(lat, lon) -> str:
+async def reverse(lat: float, lon: float) -> str:
     """ZIP from coordinates (used by 'Near me'). Census first (keyless, works on a
     fresh install), Nominatim as a fallback. Cached in revcache so repeated 'Near me'
     taps don't re-hit the network. Returns '' when no ZIP can be resolved."""

@@ -18,6 +18,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
+      - name: Lint (ruff)
+        run: ruff check app tests
+
+      - name: Type-check (mypy --strict)
+        run: mypy
+
+      - name: Audit shipped Python deps (pip-audit)
+        run: pip-audit -r requirements.txt
+
       - name: Run tests
         run: pytest -q
 
@@ -40,6 +49,12 @@ jobs:
       - name: Verify committed bundle matches src/ (reproducible build)
         run: git diff --exit-code carefind.bundle.js
 
+      - name: Audit shipped npm deps
+        # The app ships no runtime npm dependencies (the bundle is built, Leaflet loads
+        # from a CDN), so the shipped surface must be clean. Dev-only tooling vulns are
+        # tracked by Dependabot instead of blocking the build.
+        run: npm audit --omit=dev
+
       - name: Run unit tests (with coverage threshold)
         run: npm test
 
@@ -48,3 +63,14 @@ jobs:
 
       - name: Run e2e smoke
         run: npm run test:e2e
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so gitleaks can scan every commit
+      - name: Scan for committed secrets (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

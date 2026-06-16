@@ -8,7 +8,6 @@ a regression fails CI instead of silently shipping a misleading badge.
 They are deliberately exhaustive (every combination of the inputs that matter), which
 gives property-test coverage without adding a dependency. CONTRIBUTING.md points here.
 """
-import itertools
 
 import httpx
 import pytest
@@ -137,7 +136,7 @@ async def test_unknown_sources_produce_no_true(temp_db):
 async def test_estimated_results_never_verified_or_provenanced(temp_db):
     reg = _build()
     ann = await reg.annotate([{"npi": "1", "stateAb": "CA"}])
-    for plan_id, r in ann["1"].items():
+    for _plan_id, r in ann["1"].items():
         if r["confidence"] == "estimated":
             assert r["value"] in (True, None)
             assert "source_url" not in r and "fetched_at" not in r

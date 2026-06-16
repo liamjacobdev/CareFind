@@ -39,9 +39,12 @@ insurance layer; if you add a branch, extend the relevant rule. The invariants:
 ```bash
 python -m venv .venv && . .venv/Scripts/activate   # or .venv/bin/activate
 pip install -r requirements-dev.txt
+ruff check app tests       # lint (real bugs + hygiene; not opinionated formatting)
+mypy                       # strict type-check (config in pyproject.toml)
 pytest -q                  # backend tests
 
 npm install                # frontend tooling
+npm run build              # esbuild: src/ -> carefind.bundle.js (committed; CI diffs it)
 npm test                   # Vitest unit tests (carefind.logic.js), enforces coverage
 npm run test:e2e           # Playwright smoke (needs: npx playwright install chromium)
 ```
@@ -59,8 +62,19 @@ Run the app with `python -m uvicorn app.main:app --port 8000` and open
   add a field to one, add it to the other and update the fixture.
 - **E2E** (`tests-e2e/`, Playwright): the core flows over a mocked backend.
 
-CI (`.github/workflows/ci.yml`) runs pytest, Vitest (with coverage), and Playwright on
-every push and PR. Please keep all three green.
+## Quality + security gates (CI)
+
+`.github/workflows/ci.yml` enforces, on every push and PR — keep them all green, and
+never weaken a gate to pass (fix the cause):
+
+- **ruff** lint + **mypy `--strict`** on `app/` (zero errors).
+- **pytest**, **Vitest** (coverage threshold), **Playwright** e2e.
+- **Reproducible build**: `npm run build` must reproduce the committed
+  `carefind.bundle.js` byte-for-byte (`git diff --exit-code`). Edit `src/`, never the bundle.
+- **$0 security scanning**: `pip-audit` (shipped Python deps) and `npm audit --omit=dev`
+  (shipped npm surface — the app ships no runtime npm deps), **gitleaks** (committed
+  secrets), and **CodeQL** (`.github/workflows/codeql.yml`, Python + JS). **Dependabot**
+  (`.github/dependabot.yml`) keeps deps and actions patched.
 
 ## Commits
 

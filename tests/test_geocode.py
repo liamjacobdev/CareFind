@@ -123,7 +123,7 @@ async def test_reverse_transient_failure_not_cached(temp_db, monkeypatch):
     monkeypatch.setattr(settings, "geocode_use_census", True)
     monkeypatch.setattr(settings, "geocode_min_interval", 0.0)
     census = respx.get(CENSUS_REV).mock(return_value=httpx.Response(500))
-    nomin = respx.get(NOMINATIM_REV).mock(return_value=httpx.Response(500))
+    respx.get(NOMINATIM_REV).mock(return_value=httpx.Response(500))
 
     assert await geocode.reverse(10.0, 20.0) == ""
     # Both sources failed -> nothing cached, so a retry hits the network again.

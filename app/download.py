@@ -24,7 +24,7 @@ class DownloadTooLarge(Exception):
     """Raised when a remote download exceeds settings.ingest_max_bytes."""
 
 
-def _cap(max_bytes):
+def _cap(max_bytes: int | None) -> int:
     return settings.ingest_max_bytes if max_bytes is None else max_bytes
 
 
@@ -36,7 +36,7 @@ def _reject_if_declared_over(resp: httpx.Response, src: str, cap: int) -> None:
             f"{src}: declared Content-Length {int(cl)} exceeds cap of {cap} bytes")
 
 
-def stream_to_bytes(src: str, max_bytes=None, timeout: float = 600) -> bytes:
+def stream_to_bytes(src: str, max_bytes: int | None = None, timeout: float = 600) -> bytes:
     """Download `src` into memory, aborting past the cap. Chunks accumulate only
     while under the ceiling; an over-limit body raises before it is fully read."""
     cap = _cap(max_bytes)
@@ -52,8 +52,8 @@ def stream_to_bytes(src: str, max_bytes=None, timeout: float = 600) -> bytes:
     return b"".join(chunks)
 
 
-def stream_to_spool(src: str, max_bytes=None, timeout: float = 600,
-                    spool_max: int = 8 * 1024 * 1024) -> tempfile.SpooledTemporaryFile:
+def stream_to_spool(src: str, max_bytes: int | None = None, timeout: float = 600,
+                    spool_max: int = 8 * 1024 * 1024) -> "tempfile.SpooledTemporaryFile[bytes]":
     """Stream `src` into a rewound SpooledTemporaryFile (RAM up to `spool_max`, then
     disk), aborting past the cap. The caller wraps/reads it incrementally so a large
     file is parsed without ever being held whole in memory."""

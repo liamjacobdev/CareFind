@@ -3,8 +3,10 @@ real insurance acceptance. Deploy behind TLS on your own domain (see README)."""
 import logging
 import time
 import uuid
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,7 +32,7 @@ _POOL_CEILING_LARGE = 200
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     db.init_db()
     registry.build()
     log.info("CareFind up: %d Medicare NPIs, %d insurance plans available",
@@ -73,7 +75,9 @@ def _client_ip(request: Request) -> str:
 
 
 @app.middleware("http")
-async def rate_limit(request: Request, call_next):
+async def rate_limit(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     if request.url.path.startswith("/api/"):
         ip = _client_ip(request)
         decision = _limiter.check(ip)
@@ -87,7 +91,9 @@ async def rate_limit(request: Request, call_next):
 
 
 @app.middleware("http")
-async def request_context(request: Request, call_next):
+async def request_context(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     """Assign each request a short id (echoed as X-Request-ID and logged with the
     outcome, so a client's report is correlatable to a log line), and tally request
     metrics. Honors an inbound X-Request-ID from the trusted proxy for trace continuity."""
@@ -114,6 +120,7 @@ async def request_context(request: Request, call_next):
 # CORS: lock to configured origins in production. With none set we allow only
 # localhost (dev convenience) — never a blanket '*' to arbitrary sites. Added
 # last so it wraps the rate limiter and every response (incl. 429) gets headers.
+_cors: dict[str, Any]
 if settings.allowed_origins:
     _cors = {"allow_origins": settings.allowed_origins}
 else:
@@ -129,11 +136,11 @@ app.add_middleware(
 
 
 # ── normalization: NPPES record -> clean provider dict the frontend renders ──
-def _title(s):
+def _title(s: str | None) -> str:
     return " ".join(w.capitalize() for w in (s or "").split())
 
 
-def normalize(r: dict) -> dict:
+def normalize(r: dict[str, Any]) -> dict[str, Any]:
     npi = str(r.get("number", ""))
     b = r.get("basic", {}) or {}
     is_org = r.get("enumeration_type") == "NPI-2"
@@ -146,7 +153,7 @@ def normalize(r: dict) -> dict:
     loc = next((a for a in addrs if a.get("address_purpose") == "LOCATION"), addrs[0] if addrs else {})
     mail = next((a for a in addrs if a.get("address_purpose") == "MAILING"), None)
 
-    def fmt(a):
+    def fmt(a: dict[str, Any] | None) -> str:
         if not a:
             return ""
         line = _title(" ".join(filter(None, [a.get("address_1"), a.get("address_2")])))
@@ -167,7 +174,7 @@ def normalize(r: dict) -> dict:
         "postalCode": (loc.get("postal_code") or "")[:5],
         "fullAddress": fmt(loc), "mailingAddress": fmt(mail) if mail else "",
         "phone": loc.get("telephone_number", ""), "fax": loc.get("fax_number", ""),
-        "gender": {"M": "Male", "F": "Female"}.get(b.get("gender"), ""),
+        "gender": {"M": "Male", "F": "Female"}.get(b.get("gender") or "", ""),
         "soleProprietor": b.get("sole_proprietor", ""), "credential": b.get("credential", ""),
         "status": "Active" if b.get("status") == "A" else b.get("status", ""),
         "enumerationDate": b.get("enumeration_date", ""), "lastUpdated": b.get("last_updated", ""),
@@ -188,7 +195,7 @@ _FRONTEND_LOGIC = _FRONTEND.parent / "carefind.logic.js"
 _FRONTEND_BUNDLE = _FRONTEND.parent / "carefind.bundle.js"
 
 
-def _static_file(request: Request, path: Path, media_type: str, missing: str):
+def _static_file(request: Request, path: Path, media_type: str, missing: str) -> Response:
     """Serve a static file with an ETag + short Cache-Control, and answer a matching
     If-None-Match with 304 so a repeat load isn't re-downloaded. The ETag is derived
     from the file's mtime+size, so editing the file invalidates caches automatically."""
@@ -204,20 +211,20 @@ def _static_file(request: Request, path: Path, media_type: str, missing: str):
 
 
 @app.get("/")
-def index(request: Request):
+def index(request: Request) -> Response:
     return _static_file(request, _FRONTEND, "text/html",
                         "Frontend (carefind.html) not found next to the app package.")
 
 
 @app.get("/carefind.bundle.js")
-def frontend_bundle(request: Request):
+def frontend_bundle(request: Request) -> Response:
     # The page's interactive layer, bundled from src/ by `npm run build` (esbuild).
     return _static_file(request, _FRONTEND_BUNDLE, "application/javascript",
                         "carefind.bundle.js not found — run `npm run build`.")
 
 
 @app.get("/carefind.logic.js")
-def frontend_logic(request: Request):
+def frontend_logic(request: Request) -> Response:
     # The shared pure logic module — a build input (bundled into carefind.bundle.js)
     # and the unit-tested source (Vitest). Still served for source transparency.
     return _static_file(request, _FRONTEND_LOGIC, "application/javascript",
@@ -225,26 +232,26 @@ def frontend_logic(request: Request):
 
 
 @app.get("/healthz")
-def healthz():
+def healthz() -> dict[str, Any]:
     return {"ok": True, "medicare_npis": db.medicare_count(), "insurance_plans": registry.plans()}
 
 
 @app.get("/metrics")
-def metrics_endpoint():
+def metrics_endpoint() -> dict[str, Any]:
     """In-process operational metrics: request counts by status, geocode/FHIR cache
     hit rates, and upstream error count. Not under /api/, so it isn't rate-limited."""
     return metrics.snapshot()
 
 
 @app.get("/api/insurance/plans")
-def insurance_plans():
+def insurance_plans() -> dict[str, Any]:
     """Filterable plans — flat list plus grouped by coverage category. Each plan
     carries a `confidence` of 'verified' or 'estimated'."""
     return {"plans": registry.plans(), "categories": registry.categories()}
 
 
 @app.get("/api/insurance/{npi}")
-async def insurance_for(npi: str, state: str = ""):
+async def insurance_for(npi: str, state: str = "") -> dict[str, Any]:
     """Coverage for one NPI. Estimated-tier plans need a `state` to resolve;
     without it only verified answers appear."""
     return {"npi": npi, "insurance": await registry.check_all(npi, state)}
@@ -254,22 +261,25 @@ async def insurance_for(npi: str, state: str = ""):
 async def api_npi(
     zip: str = "", city: str = "", state: str = "", npi: str = "",
     name: str = "", taxonomy: str = "", type: str = "", limit: int = 25,
-):
+) -> dict[str, Any]:
     try:
         return {"results": await nppes.search(locals())}
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
     except Exception as e:
         # Keep the user-facing 502 generic, but record what actually failed so a
-        # broken upstream (NPPES down, network error) is visible in the logs.
+        # broken upstream (NPPES down, network error) is visible in the logs. Use
+        # e.__class__ (not type(e)) — `type` is shadowed by the query param above.
         metrics.incr("upstream_error")
         log.warning("NPPES search failed (zip=%s city=%s state=%s npi=%s name=%s): %s: %s",
-                    zip, city, state, npi, name, type(e).__name__, e)
-        raise HTTPException(502, "Could not reach the registry.")
+                    zip, city, state, npi, name, e.__class__.__name__, e)
+        raise HTTPException(502, "Could not reach the registry.") from e
 
 
 @app.get("/api/geocode")
-async def api_geocode(q: str = "", postalcode: str = "", city: str = "", state: str = ""):
+async def api_geocode(
+    q: str = "", postalcode: str = "", city: str = "", state: str = ""
+) -> dict[str, Any]:
     """Geocode a free-text `q`, or a structured {postalcode, city, state}. The
     frontend sends the structured form for the map center, so accept both rather
     than 422-ing on a missing `q`."""
@@ -282,11 +292,11 @@ _BATCH_MAX_ITEMS = 100
 
 
 class BatchReq(BaseModel):
-    items: list  # [{"key": str, "q": str}]
+    items: list[dict[str, Any]]  # [{"key": str, "q": str}]
 
 
 @app.post("/api/geocode/batch")
-async def api_geocode_batch(req: BatchReq):
+async def api_geocode_batch(req: BatchReq) -> dict[str, Any]:
     # Reject oversized batches: at the throttle rate an unbounded batch could block
     # every user's geocoding on this single worker for minutes (a DoS vector).
     if len(req.items) > _BATCH_MAX_ITEMS:
@@ -297,8 +307,12 @@ async def api_geocode_batch(req: BatchReq):
 
 
 @app.get("/api/reverse")
-async def api_reverse(lat: str, lon: str):
-    return {"postcode": await geocode.reverse(lat, lon)}
+async def api_reverse(lat: str, lon: str) -> dict[str, Any]:
+    try:
+        lat_f, lon_f = float(lat), float(lon)
+    except ValueError:
+        return {"postcode": ""}
+    return {"postcode": await geocode.reverse(lat_f, lon_f)}
 
 
 @app.get("/api/providers/search")
@@ -309,7 +323,7 @@ async def providers_search(
     accepts: str = Query("", description="Comma-separated plan ids the provider must accept, e.g. 'medicare,aetna'"),
     accepts_mode: str = Query("verified", description="'verified' = require confirmed acceptance; 'any' = also allow estimated matches"),
     geocode_results: bool = Query(True, alias="geocode"),
-):
+) -> dict[str, Any]:
     """One call: query NPPES, attach insurance flags (verified + estimated), then —
     for a radius search — geocode the candidate pool, keep only providers truly
     within `radius` miles of the ZIP center, sort by distance, and return ranked
@@ -328,12 +342,13 @@ async def providers_search(
     try:
         raw = await nppes.search(q)
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, str(e)) from e
     except Exception as e:
         metrics.incr("upstream_error")
+        # e.__class__ (not type(e)) — `type` is shadowed by the query param above.
         log.warning("provider search failed (zip=%s city=%s state=%s name=%s): %s: %s",
-                    zip, city, state, name, type(e).__name__, e)
-        raise HTTPException(502, "Could not reach the registry.")
+                    zip, city, state, name, e.__class__.__name__, e)
+        raise HTTPException(502, "Could not reach the registry.") from e
 
     # Did the upstream NPPES pool itself hit its ceiling? If so even the post-filter
     # total below is a lower bound (there may be matches we never fetched), so the UI
@@ -349,7 +364,7 @@ async def providers_search(
 
     # Filter: keep providers that accept ALL requested plans. In 'verified' mode an
     # estimate doesn't satisfy the filter; in 'any' mode an estimated True does.
-    def accepts_plan(p, plan_id):
+    def accepts_plan(p: dict[str, Any], plan_id: str) -> bool:
         info = p["insurance"].get(plan_id)
         if not info or info.get("value") is not True:
             return False

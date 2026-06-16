@@ -7,9 +7,10 @@ signals still hold per worker.
 """
 import threading
 from collections import Counter
+from typing import Any
 
 _lock = threading.Lock()
-_counts = Counter()
+_counts: Counter[str] = Counter()
 
 
 def incr(name: str, n: int = 1) -> None:
@@ -17,12 +18,12 @@ def incr(name: str, n: int = 1) -> None:
         _counts[name] += n
 
 
-def _rate(hits: int, misses: int):
+def _rate(hits: int, misses: int) -> float | None:
     total = hits + misses
     return round(hits / total, 4) if total else None
 
 
-def snapshot() -> dict:
+def snapshot() -> dict[str, Any]:
     with _lock:
         d = dict(_counts)
     g_hit, g_miss = d.get("geocode_hit", 0), d.get("geocode_miss", 0)
