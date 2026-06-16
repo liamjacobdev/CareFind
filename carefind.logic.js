@@ -121,6 +121,29 @@
     };
   }
 
+  // Map one insurance answer to a display status, honoring the payer/plan
+  // distinction (A2). A *payer-level* verified hit means the provider is listed in
+  // that payer's network directory — NOT that a specific plan is accepted — so it is
+  // deliberately never labeled "Confirmed". Only a plan-level program (e.g. Medicare)
+  // earns "Confirmed". Estimated answers are always "Likely", never confirmed.
+  // Returns {cls, text} or null when there's nothing to show.
+  function coverageStatus(info){
+    if(!info) return null;
+    const v=info.value, level=info.level||'payer';
+    if(info.confidence==='verified'){
+      if(v===true) return level==='plan'
+        ? {cls:'yes', text:'Confirmed'}
+        : {cls:'innet', text:'In-network'};
+      if(v===false) return level==='plan'
+        ? {cls:'no', text:'Not enrolled'}
+        : {cls:'no', text:'Not listed'};
+      return {cls:'unknown', text:'Unverified'};
+    }
+    return v===true ? {cls:'likely', text:'Likely · confirm'}
+                    : {cls:'unknown', text:'Unverified'};
+  }
+
   return { TAXONOMY_MAP, PALETTE, toTitleCase, formatPhone, hashStr, haversine,
-           cssEsc, esc, buildNpiParams, buildProviders, adaptBackendProvider };
+           cssEsc, esc, buildNpiParams, buildProviders, adaptBackendProvider,
+           coverageStatus };
 });

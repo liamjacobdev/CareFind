@@ -78,6 +78,12 @@ class InsuranceSource:
     payer = "base"
     confidence = "estimated"   # "verified" | "estimated"
     kind = "generic"
+    # "payer" — the answer is about the payer's *network directory* (the provider is
+    #   listed in, e.g., Aetna's network), NOT confirmation of a specific plan. A
+    #   payer-level hit must never be presented as "accepts your plan".
+    # "plan"  — the answer is about a specific, single plan/program (e.g. Medicare
+    #   Original): a True here is a genuine plan-level confirmation.
+    level = "payer"
 
     def available(self) -> bool:
         return False
@@ -100,6 +106,9 @@ class MedicareSource(InsuranceSource):
     payer = "medicare"
     confidence = "verified"
     kind = "government"
+    # Medicare FFS is a single program: enrollment in the CMS file IS plan-level
+    # confirmation, not a "listed in a payer's network" signal.
+    level = "plan"
 
     def __init__(self):
         self._avail = (False, 0.0)
@@ -377,6 +386,7 @@ class Registry:
             out.append({
                 "id": plan_id, "label": best.label, "category": best.category,
                 "payer": best.payer, "confidence": best.confidence, "kind": best.kind,
+                "level": best.level,
             })
         out.sort(key=lambda p: (CATEGORY_ORDER.get(p["category"], 99), p["label"].lower()))
         return out
@@ -436,6 +446,7 @@ class Registry:
                     _, _, value, s = best
                     result[npi][plan_id] = {
                         "value": value, "confidence": s.confidence, "source": s.id,
+                        "level": s.level,
                     }
         return result
 

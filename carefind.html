@@ -153,6 +153,7 @@
   .cov-status.no { color:var(--muted); }
   .cov-status.unknown { color:var(--faint); }
   .cov-status.likely { color:var(--honey); }
+  .cov-status.innet { color:#1f6f8b; }   /* payer network listing — distinct from green "Confirmed" */
 
   /* Insurance filter: mode toggle, legend, grouped chips, confidence dots */
   .ins-mode { display:inline-flex; border:1.5px solid var(--border-2); border-radius:8px; overflow:hidden; margin-bottom:9px; }
@@ -166,6 +167,7 @@
   .conf-dot.verified { background:var(--jade); }
   .conf-dot.estimated { background:var(--honey); }
   .ins-badge.likely { color:#8a611a; background:var(--honey-l); }
+  .ins-badge.innet { color:#1f6f8b; background:#e7f1f4; border-color:#c4dde4; }
 
   .data-note { margin:13px 0 0; padding:11px 13px; max-width:640px; background:linear-gradient(180deg,var(--paper-warm),var(--paper-2)); border:1px solid var(--border);
     border-radius:var(--r-sm); font-size:.69rem; line-height:1.55; color:var(--muted); display:flex; gap:8px; align-items:flex-start; box-shadow:var(--shadow-xs); }
@@ -989,7 +991,11 @@ function renderInsuranceFilter(){
     const chips=plans.map(pl=>{
       const on=state.selectedPlans.includes(pl.id);
       const conf=pl.confidence==='verified'?'verified':'estimated';
-      const title=conf==='verified'?'Verified from a real source':'Estimated — confirm with the provider';
+      const title=conf!=='verified'
+        ? 'Estimated — confirm with the provider'
+        : (pl.level==='plan'
+            ? 'Verified from a real source'
+            : 'Verified network directory — confirm your specific plan');
       return `<button type="button" role="checkbox" aria-checked="${on?'true':'false'}" class="ins-chip ${on?'checked':''}" data-action="toggle-plan" data-plan="${esc(pl.id)}" title="${esc(title)}">
         <span class="tick">${on?CHECK_SVG:''}</span>${esc(pl.label)}<span class="conf-dot ${conf}" aria-hidden="true"></span></button>`;
     }).join('');
@@ -1173,7 +1179,11 @@ function insuranceBadgesHtml(doc){
   for(const id of Object.keys(ins)){
     const info=ins[id]; if(!info||info.value!==true) continue;
     if(info.confidence==='verified'){
-      out.push(`<span class="ins-badge">${chk}${esc(planLabel(id))}</span>`);          // green "Confirmed"
+      if((info.level||'payer')==='plan'){
+        out.push(`<span class="ins-badge">${chk}${esc(planLabel(id))}</span>`);            // green "Confirmed" — a specific program
+      } else {
+        out.push(`<span class="ins-badge innet">${esc(planLabel(id))} · in-network</span>`); // payer network listing, not plan acceptance
+      }
     } else if(state.insMode==='any' && state.selectedPlans.includes(id)){
       out.push(`<span class="ins-badge likely">${esc(planLabel(id))} · likely</span>`); // amber, only when estimates are opted into AND filtered
     }
@@ -1194,20 +1204,13 @@ function coverageHtml(doc, insSearch){
       return ca-cb || planLabel(a).localeCompare(planLabel(b));
     });
     const items=ids.map(id=>{
-      const info=ins[id], v=info.value;
-      let status;
-      if(info.confidence==='verified'){
-        status=v===true?'<span class="cov-status yes">Confirmed</span>'
-          :v===false?'<span class="cov-status no">Not enrolled</span>'
-          :'<span class="cov-status unknown">Unverified</span>';
-      } else {
-        status=v===true?'<span class="cov-status likely">Likely · confirm</span>'
-          :'<span class="cov-status unknown">Unverified</span>';
-      }
+      const info=ins[id];
+      const s=coverageStatus(info);
+      const status=`<span class="cov-status ${s.cls}">${esc(s.text)}</span>`;
       return `<div class="cov-item"><span>${esc(planLabel(id))}</span>${status}</div>`;
     }).join('');
     return `<div class="cov-list">${items}</div>
-      <p style="font-size:.7rem;color:var(--faint);margin:9px 0 0;line-height:1.5;"><b>Confirmed</b> = verified against official Medicare enrollment, a payer directory, or an ingested in-network file. <b>Likely</b> = a major plan available in this area, not provider-specific — <a href="${insSearch}" target="_blank" rel="noopener">confirm directly</a>.</p>`;
+      <p style="font-size:.7rem;color:var(--faint);margin:9px 0 0;line-height:1.5;"><b>Confirmed</b> = enrolled in a specific program (e.g. official Medicare). <b>In-network</b> = listed in this payer's network directory — confirm your specific plan. <b>Likely</b> = a major payer operating in this area, not provider-specific. <a href="${insSearch}" target="_blank" rel="noopener">Confirm directly</a>.</p>`;
   }
   return `<div class="coverage-note">
       <b>Insurance networks are not part of the public registry.</b> This standalone build shows the official CMS record, which does not list accepted plans. Connect the CareFind backend to enable verified Medicare and payer-network filtering. Until then, confirm coverage directly before booking.

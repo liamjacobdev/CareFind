@@ -37,7 +37,8 @@ async def test_medicare_verified_true_false(temp_db):
         [{"npi": "1003000126", "stateAb": "FL"}, {"npi": "9999999999", "stateAb": "FL"}],
         only=["medicare"],
     )
-    assert ann["1003000126"]["medicare"] == {"value": True, "confidence": "verified", "source": "medicare"}
+    assert ann["1003000126"]["medicare"] == {
+        "value": True, "confidence": "verified", "source": "medicare", "level": "plan"}
     assert ann["9999999999"]["medicare"]["value"] is False
 
 
@@ -61,7 +62,8 @@ async def test_regional_payer_state_scoped_and_graduates_when_wired(temp_db, mon
         respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(200, json=_IN_NETWORK))
         reg2 = Registry(); reg2.build()
         ann2 = await reg2.annotate([{"npi": "1", "stateAb": "WA"}], only=["premera_bcbs"])
-    assert ann2["1"]["premera_bcbs"] == {"value": True, "confidence": "verified", "source": "premera_bcbs"}
+    assert ann2["1"]["premera_bcbs"] == {
+        "value": True, "confidence": "verified", "source": "premera_bcbs", "level": "payer"}
 
 
 @pytest.mark.asyncio
@@ -111,6 +113,35 @@ async def test_estimated_returns_true_or_none_never_false():
     assert (await national.check_many_ctx({"1": {"state": ""}}))["1"] is True
     assert (await regional.check_many_ctx({"1": {"state": "CA"}}))["1"] is True
     assert (await regional.check_many_ctx({"1": {"state": "TX"}}))["1"] is None  # never False
+
+
+# ── A2: payer-level network listing vs plan-level acceptance ───────────────────
+def test_plans_carry_level_payer_vs_plan(temp_db):
+    """Every emitted plan declares its level. Medicare is plan-level (a single
+    program); commercial network directories are payer-level."""
+    db.medicare_add_many(["1003000126"])
+    reg = _build()
+    by_id = {p["id"]: p for p in reg.plans()}
+    assert by_id["medicare"]["level"] == "plan"
+    # Catalog commercial payers are payer-level (a network directory, not a plan).
+    assert by_id["aetna"]["level"] == "payer"
+    assert by_id["cigna"]["level"] == "payer"
+    # Every plan declares one of the two valid levels — no silent omissions.
+    assert all(p["level"] in ("payer", "plan") for p in reg.plans())
+
+
+@pytest.mark.asyncio
+async def test_annotate_results_carry_level(temp_db):
+    """A per-provider answer must say whether it's a payer-directory listing or a
+    plan-level confirmation, so the UI can avoid implying plan acceptance."""
+    db.medicare_add_many(["1003000126"])
+    db.tic_add_many("aetna", ["1003000126"])
+    reg = _build()
+    ann = await reg.annotate(
+        [{"npi": "1003000126", "stateAb": "CA"}], only=["medicare", "aetna"])
+    assert ann["1003000126"]["medicare"]["level"] == "plan"
+    # A TiC ingest is a payer network listing, not a specific-plan confirmation.
+    assert ann["1003000126"]["aetna"]["level"] == "payer"
 
 
 # ── A1: presence-only must never become a Confirmed yes ───────────────────────
@@ -290,7 +321,8 @@ async def test_fhir_wired_payer_returns_verified(temp_db, monkeypatch):
     assert cigna_plan["confidence"] == "verified"
 
     ann = await reg.annotate([{"npi": "1003000126", "stateAb": "CA"}], only=["cigna"])
-    assert ann["1003000126"]["cigna"] == {"value": True, "confidence": "verified", "source": "cigna"}
+    assert ann["1003000126"]["cigna"] == {
+        "value": True, "confidence": "verified", "source": "cigna", "level": "payer"}
 
 
 @respx.mock

@@ -8,7 +8,40 @@ import logic from '../carefind.logic.js';
 const {
   esc, cssEsc, haversine, formatPhone, toTitleCase, hashStr,
   buildNpiParams, buildProviders, adaptBackendProvider, PALETTE, TAXONOMY_MAP,
+  coverageStatus,
 } = logic;
+
+describe('coverageStatus — payer vs plan level (A2)', () => {
+  it('labels a plan-level verified hit "Confirmed"', () => {
+    expect(coverageStatus({ value: true, confidence: 'verified', level: 'plan' }))
+      .toEqual({ cls: 'yes', text: 'Confirmed' });
+  });
+  it('NEVER labels a payer-level hit "Confirmed" — it is a network listing', () => {
+    const s = coverageStatus({ value: true, confidence: 'verified', level: 'payer' });
+    expect(s.text).not.toBe('Confirmed');
+    expect(s).toEqual({ cls: 'innet', text: 'In-network' });
+  });
+  it('defaults missing level to payer (never over-claims as Confirmed)', () => {
+    expect(coverageStatus({ value: true, confidence: 'verified' }).text).not.toBe('Confirmed');
+  });
+  it('verified false reads as not-enrolled (plan) vs not-listed (payer)', () => {
+    expect(coverageStatus({ value: false, confidence: 'verified', level: 'plan' }).text).toBe('Not enrolled');
+    expect(coverageStatus({ value: false, confidence: 'verified', level: 'payer' }).text).toBe('Not listed');
+  });
+  it('verified unknown (null) is never a yes', () => {
+    expect(coverageStatus({ value: null, confidence: 'verified', level: 'payer' }))
+      .toEqual({ cls: 'unknown', text: 'Unverified' });
+  });
+  it('an estimate is always "Likely", never Confirmed/In-network', () => {
+    const s = coverageStatus({ value: true, confidence: 'estimated', level: 'payer' });
+    expect(s).toEqual({ cls: 'likely', text: 'Likely · confirm' });
+    expect(coverageStatus({ value: null, confidence: 'estimated' }).text).toBe('Unverified');
+  });
+  it('returns null when there is nothing to show', () => {
+    expect(coverageStatus(null)).toBeNull();
+    expect(coverageStatus(undefined)).toBeNull();
+  });
+});
 
 describe('esc — HTML escaping (XSS)', () => {
   it('neutralizes an <img onerror> payload', () => {
