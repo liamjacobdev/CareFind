@@ -1,0 +1,46 @@
+# Free scheduled ingestion (C3). Refreshes the deployed instance with zero manual data
+# steps by POSTing the token-secured /admin/ingest endpoint. TiC monthly, Medicare
+# quarterly. Set repo secrets CAREFIND_URL (deployed base URL) and CAREFIND_ADMIN_TOKEN.
+# A successful run also pings Healthchecks.io (HEALTHCHECK_PING_URL) as a dead-man's
+# switch, so a *missed* or *failed* run is alerted (the cron not firing is itself caught).
+name: Scheduled ingest
+
+on:
+  schedule:
+    - cron: "17 8 1 * *"          # 1st of every month — TiC (commercial) refresh
+    - cron: "23 9 1 1,4,7,10 *"   # quarterly — Medicare enrollment refresh
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "all | tic | medicare"
+        default: "all"
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pick source for this trigger
+        id: pick
+        run: |
+          case "${{ github.event.schedule }}" in
+            "23 9 1 1,4,7,10 *") echo "source=medicare" >> "$GITHUB_OUTPUT" ;;
+            "17 8 1 * *")        echo "source=tic"      >> "$GITHUB_OUTPUT" ;;
+            *)                   echo "source=${{ github.event.inputs.source || 'all' }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Trigger refresh on the deployed instance
+        env:
+          BASE: ${{ secrets.CAREFIND_URL }}
+          TOKEN: ${{ secrets.CAREFIND_ADMIN_TOKEN }}
+          SOURCE: ${{ steps.pick.outputs.source }}
+        run: |
+          test -n "$BASE" || { echo "CAREFIND_URL secret not set"; exit 1; }
+          curl -fsS --max-time 60 -X POST \
+            "$BASE/admin/ingest?source=$SOURCE" \
+            -H "Authorization: Bearer $TOKEN"
+
+      - name: Ping dead-man's-switch (optional)
+        if: success() && env.PING != ''
+        env:
+          PING: ${{ secrets.HEALTHCHECK_PING_URL }}
+        run: curl -fsS --max-time 20 "$PING" || true

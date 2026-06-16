@@ -93,6 +93,9 @@ Document each payer's source URL and the date you retrieved it here as you wire 
 
 > Honest scope note: there is **no single free API** for all commercial insurers. The **estimated** tier gives you broad, recognizable named-payer filters on day one (clearly labeled, never presented as confirmed); the **verified** tier grows as you wire FHIR Plan-Net endpoints and ingest Transparency-in-Coverage files. Medicare is verified and national out of the box.
 
+### Automated refresh + freshness SLOs (zero manual data steps)
+The [scheduled-ingest workflow](.github/workflows/ingest.yml) (free GitHub Actions cron) refreshes the deployed instance — TiC monthly, Medicare quarterly — by POSTing the **token-secured** `POST /admin/ingest?source=tic|medicare|all` endpoint (set repo secrets `CAREFIND_URL` + `CAREFIND_ADMIN_TOKEN`; the endpoint is disabled until `CAREFIND_ADMIN_TOKEN` is set, and runs the ingest in the background). `GET /healthz` reports per-source **data ages vs SLOs** and **flips to 503** when a source goes stale (Medicare > `CAREFIND_MEDICARE_MAX_AGE_DAYS`, default 100; payers > `CAREFIND_PAYER_MAX_AGE_DAYS`, default 35) — a dead-man's-switch an uptime monitor can watch, so a stalled ingest is surfaced rather than silently serving old data.
+
 ---
 
 ## Run it locally

@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
@@ -231,9 +231,71 @@ def frontend_logic(request: Request) -> Response:
                         "carefind.logic.js not found next to the app package.")
 
 
+def _data_freshness() -> dict[str, Any]:
+    """Per-source data ages vs their SLOs (C3). A source is 'stale' when its last
+    ingest is older than its budget — Medicare quarterly, TiC payers monthly. A source
+    that was never ingested has no row here and so never trips the switch (that's a
+    setup state, not a stalled ingest)."""
+    now = time.time()
+    sources: list[dict[str, Any]] = []
+    stale: list[str] = []
+    for sid, (_url, ts) in sorted(db.source_meta_all().items()):
+        max_days = settings.medicare_max_age_days if sid == "medicare" else settings.payer_max_age_days
+        age_days = (now - ts) / 86400.0
+        is_stale = age_days > max_days
+        sources.append({"source": sid, "age_days": round(age_days, 1),
+                        "slo_days": max_days, "stale": is_stale})
+        if is_stale:
+            stale.append(sid)
+    return {"sources": sources, "stale": stale, "slos_met": not stale}
+
+
 @app.get("/healthz")
-def healthz() -> dict[str, Any]:
-    return {"ok": True, "medicare_npis": db.medicare_count(), "insurance_plans": registry.plans()}
+def healthz(response: Response) -> dict[str, Any]:
+    """Liveness + data-freshness. Flips to 503 (the dead-man's-switch an uptime monitor
+    watches) when a tracked source has gone stale past its SLO."""
+    fresh = _data_freshness()
+    if not fresh["slos_met"]:
+        response.status_code = 503
+    return {"ok": fresh["slos_met"], "medicare_npis": db.medicare_count(),
+            "insurance_plans": registry.plans(), "data_freshness": fresh}
+
+
+def _trigger_ingest(source: str) -> None:
+    """Run the configured ingest(s) in the background (called by POST /admin/ingest).
+    Imported lazily to keep startup light; failures are logged, never raised to a task."""
+    from . import ingest_medicare, ingest_tic_job
+    try:
+        if source in ("tic", "all"):
+            ingest_tic_job.run()
+        if source in ("medicare", "all"):
+            if settings.medicare_ingest_url:
+                ingest_medicare.ingest(settings.medicare_ingest_url)
+            else:
+                log.warning("admin ingest: medicare skipped — CAREFIND_MEDICARE_INGEST_URL unset")
+    except SystemExit as e:  # ingest_tic_job.run() exits when no sources are configured
+        log.warning("admin ingest (%s) ended early: %s", source, e)
+    except Exception:
+        log.exception("admin ingest (%s) failed", source)
+
+
+@app.post("/admin/ingest")
+def admin_ingest(
+    background_tasks: BackgroundTasks,
+    source: str = Query("all", description="all | tic | medicare"),
+    authorization: str = Header(default=""),
+) -> dict[str, Any]:
+    """Token-secured refresh trigger for the scheduled ingest cron. Disabled (404) until
+    CAREFIND_ADMIN_TOKEN is set; the ingest runs in the background so the cron returns
+    promptly. Not under /api/, so it isn't rate-limited."""
+    if not settings.admin_token:
+        raise HTTPException(404, "Admin ingest is disabled (set CAREFIND_ADMIN_TOKEN).")
+    if authorization != f"Bearer {settings.admin_token}":
+        raise HTTPException(403, "Invalid or missing admin token.")
+    if source not in ("all", "tic", "medicare"):
+        raise HTTPException(400, "source must be one of: all, tic, medicare.")
+    background_tasks.add_task(_trigger_ingest, source)
+    return {"status": "scheduled", "source": source}
 
 
 @app.get("/metrics")

@@ -45,7 +45,44 @@ def client(temp_db, monkeypatch):
 def test_healthz(client):
     r = client.get("/healthz")
     assert r.status_code == 200
-    assert r.json()["medicare_npis"] >= 1
+    body = r.json()
+    assert body["medicare_npis"] >= 1
+    assert body["ok"] is True
+    assert "data_freshness" in body
+
+
+def test_healthz_flips_to_503_when_a_source_is_stale(client):
+    """C3 dead-man's-switch: a tracked source past its SLO flips /healthz unhealthy."""
+    import time as _t
+    # Fresh ingest -> healthy.
+    db.source_meta_set("medicare", "https://cms.example/file", _t.time())
+    assert client.get("/healthz").status_code == 200
+
+    # Older than the Medicare SLO -> stale -> 503, and named in the freshness report.
+    stale_ts = _t.time() - (main.settings.medicare_max_age_days + 5) * 86400
+    db.source_meta_set("medicare", "https://cms.example/file", stale_ts)
+    r = client.get("/healthz")
+    assert r.status_code == 503
+    body = r.json()
+    assert body["ok"] is False
+    assert "medicare" in body["data_freshness"]["stale"]
+
+
+def test_admin_ingest_requires_token(client, monkeypatch):
+    # Disabled (no token configured) -> 404.
+    monkeypatch.setattr(main.settings, "admin_token", "")
+    assert client.post("/admin/ingest?source=tic").status_code == 404
+
+    # Configured -> wrong/missing token rejected, correct token schedules the ingest.
+    monkeypatch.setattr(main.settings, "admin_token", "s3cret")
+    called = {}
+    monkeypatch.setattr(main, "_trigger_ingest", lambda source: called.setdefault("source", source))
+    assert client.post("/admin/ingest?source=tic").status_code == 403
+    assert client.post("/admin/ingest?source=tic",
+                       headers={"Authorization": "Bearer wrong"}).status_code == 403
+    r = client.post("/admin/ingest?source=tic", headers={"Authorization": "Bearer s3cret"})
+    assert r.status_code == 200 and r.json()["status"] == "scheduled"
+    assert called["source"] == "tic"  # background task ran after the response
 
 
 def test_plans_grouped(client):

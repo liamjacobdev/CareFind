@@ -122,6 +122,19 @@ class Settings:
             "CAREFIND_USE_PLANET_REGISTRY", "true"
         ).strip().lower() in ("1", "true", "yes", "on")
 
+        # Data-age SLOs (C3). A source whose last ingest is older than its budget is
+        # "stale" and flips /healthz to 503 — a dead-man's-switch for a stalled ingest.
+        # Medicare refreshes quarterly (~92d; allow slack); TiC payers monthly.
+        self.medicare_max_age_days = int(os.environ.get("CAREFIND_MEDICARE_MAX_AGE_DAYS", "100"))
+        self.payer_max_age_days = int(os.environ.get("CAREFIND_PAYER_MAX_AGE_DAYS", "35"))
+
+        # Token guarding POST /admin/ingest, which the scheduled ingest cron calls to
+        # refresh the deployed instance. Unset -> the admin endpoint is disabled (404).
+        self.admin_token = os.environ.get("CAREFIND_ADMIN_TOKEN", "").strip()
+        # Direct URL to the CMS Medicare enrollment CSV, used by the admin "medicare"
+        # ingest trigger. Unset -> that trigger reports it's unconfigured (no guessing).
+        self.medicare_ingest_url = os.environ.get("CAREFIND_MEDICARE_INGEST_URL", "").strip()
+
     def load_payers(self) -> list[dict[str, Any]]:
         """Read payers.json -> list of payer config dicts. Missing file is fine."""
         path = Path(self.payers_file)

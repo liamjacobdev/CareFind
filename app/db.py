@@ -288,6 +288,14 @@ def source_meta_get(source_id: str) -> tuple[str, float] | None:
     return None
 
 
+def source_meta_all() -> dict[str, tuple[str, float]]:
+    """All recorded source provenance: {source_id: (source_url, fetched_at)} — the basis
+    for the data-age SLOs in /healthz."""
+    with _conn() as conn:
+        rows = conn.execute("SELECT source_id, source_url, fetched_at FROM source_meta").fetchall()
+    return {r["source_id"]: (r["source_url"] or "", r["fetched_at"]) for r in rows}
+
+
 # ── Datastore seam ────────────────────────────────────────────────────────────
 # The module functions above ARE the SQLite implementation. SqliteDatastore wraps
 # them as an object satisfying the Datastore protocol (app/interfaces.py), so a future
@@ -316,6 +324,7 @@ class SqliteDatastore:
     fhir_cache_set_many = staticmethod(fhir_cache_set_many)
     source_meta_set = staticmethod(source_meta_set)
     source_meta_get = staticmethod(source_meta_get)
+    source_meta_all = staticmethod(source_meta_all)
 
 
 def build_datastore() -> Datastore:
