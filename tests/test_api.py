@@ -124,9 +124,29 @@ def test_verified_mode_excludes_estimated_only_payer(client):
     # aetna has no verified source here, so verified-mode yields nobody...
     v = client.get("/api/providers/search?zip=32536&geocode=false&accepts=aetna&accepts_mode=verified").json()
     assert v["count"] == 0
-    # ...but 'any' mode accepts the in-state estimate for both.
-    a = client.get("/api/providers/search?zip=32536&geocode=false&accepts=aetna&accepts_mode=any").json()
-    assert a["count"] == 2
+
+
+def test_national_estimate_does_not_filter(client):
+    """A4: selecting a national estimate ('aetna') doesn't narrow the result set —
+    it's area context, not a provider-specific filter. The response says so via
+    applied_filters (empty) and context_plans, instead of presenting all in-state
+    providers as a filtered match."""
+    a = client.get(
+        "/api/providers/search?zip=32536&geocode=false&accepts=aetna&accepts_mode=any"
+    ).json()
+    assert a["count"] == 2                  # unchanged from an unfiltered search
+    assert a["applied_filters"] == []       # nothing actually filtered
+    assert a["context_plans"] == ["aetna"]  # surfaced as context only
+
+
+def test_regional_estimate_still_discriminates_by_state(client):
+    """A4: a regional estimate genuinely filters — Kaiser doesn't serve FL, so an
+    'any'-mode Kaiser filter on FL providers excludes everyone (it discriminates)."""
+    k = client.get(
+        "/api/providers/search?zip=32536&geocode=false&accepts=kaiser&accepts_mode=any"
+    ).json()
+    assert k["applied_filters"] == ["kaiser"]  # it does drive the filter
+    assert k["count"] == 0                      # and excludes the FL providers
 
 
 def test_normalize_pins_provider_shape():

@@ -49,6 +49,12 @@ describe('coverageStatus — payer vs plan level (A2)', () => {
     expect(s).toEqual({ cls: 'likely', text: 'Likely · confirm' });
     expect(coverageStatus({ value: null, confidence: 'estimated' }).text).toBe('Unverified');
   });
+  it('a non-filterable national estimate reads as area context, not a match (A4)', () => {
+    const s = coverageStatus({ value: true, confidence: 'estimated' }, false);
+    expect(s).toEqual({ cls: 'likely', text: 'Operates in your area' });
+    // A filterable (regional) estimate keeps the "likely · confirm" wording.
+    expect(coverageStatus({ value: true, confidence: 'estimated' }, true).text).toBe('Likely · confirm');
+  });
   it('returns null when there is nothing to show', () => {
     expect(coverageStatus(null)).toBeNull();
     expect(coverageStatus(undefined)).toBeNull();

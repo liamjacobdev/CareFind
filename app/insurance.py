@@ -91,6 +91,15 @@ class InsuranceSource:
     def available(self) -> bool:
         return False
 
+    def discriminates(self) -> bool:
+        """Whether selecting this plan as a filter can actually narrow a result set.
+
+        Verified sources discriminate: a provider is either in the record or not.
+        A national estimate that marks every provider True narrows nothing, so it is
+        area *context*, not a filter (see EstimatedPayerSource).
+        """
+        return True
+
     def provenance_many(self, npis: list) -> dict:
         """{str(npi): {"source_url": str, "fetched_at": float|None}} for these NPIs.
 
@@ -368,6 +377,13 @@ class EstimatedPayerSource(InsuranceSource):
     def available(self) -> bool:
         return True
 
+    def discriminates(self) -> bool:
+        # A national estimate (states is None) marks every provider True, so using it
+        # as a filter narrows nothing and would falsely imply the kept providers were
+        # confirmed for that payer. It's area context, not a filter. A regional
+        # estimate genuinely discriminates by state, so it stays filterable.
+        return self.states is not None
+
     def _serves(self, state: str) -> bool:
         if self.states is None:
             return True
@@ -425,7 +441,7 @@ class Registry:
             out.append({
                 "id": plan_id, "label": best.label, "category": best.category,
                 "payer": best.payer, "confidence": best.confidence, "kind": best.kind,
-                "level": best.level,
+                "level": best.level, "filterable": best.discriminates(),
             })
         out.sort(key=lambda p: (CATEGORY_ORDER.get(p["category"], 99), p["label"].lower()))
         return out

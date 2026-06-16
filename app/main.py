@@ -358,11 +358,24 @@ async def providers_search(
             return False
         return mode == "any" or info.get("confidence") == "verified"
 
-    # Keep providers that accept ANY of the selected plans (a patient usually has
-    # one plan, or wants "accepts any of mine"). Requiring ALL is unintuitive and
-    # easily yields zero results (e.g. a regional payer that doesn't serve the state).
-    if want:
-        providers = [p for p in providers if any(accepts_plan(p, a) for a in want)]
+    # A national "operates in your area" estimate marks every in-state provider True,
+    # so in 'any' mode filtering on it narrows nothing and would falsely imply the
+    # kept providers were confirmed for that payer. Such plans are non-filterable
+    # (filterable=False): we annotate them as context but they don't drive the filter.
+    # In 'verified' mode every selected plan still filters on its verified records
+    # (a payer with no verified source then honestly yields zero, not "operates here").
+    plans_meta = {p["id"]: p for p in registry.plans()}
+    if mode == "any":
+        filter_want = [a for a in want if plans_meta.get(a, {}).get("filterable", True)]
+    else:
+        filter_want = list(want)
+    context_plans = [a for a in want if a not in filter_want]
+
+    # Keep providers that accept ANY of the selected (filterable) plans. Requiring ALL
+    # is unintuitive and easily yields zero results (e.g. a regional payer that doesn't
+    # serve the state).
+    if filter_want:
+        providers = [p for p in providers if any(accepts_plan(p, a) for a in filter_want)]
 
     # Geocode the result set when the caller wants coordinates, OR whenever this is
     # a radius search — distance-filtering needs coordinates regardless of the flag,
@@ -413,6 +426,8 @@ async def providers_search(
         "total": total_matched,        # matches after all filters, within the fetched pool
         "truncated": truncated,        # True when results beyond `limit` were dropped
         "pool_capped": pool_capped,    # True when `total` is itself a lower bound
+        "applied_filters": filter_want,  # selected plans that actually narrowed results
+        "context_plans": context_plans,  # selected non-filtering "operates here" estimates
         "plans": registry.plans(),
         "providers": providers,
     }

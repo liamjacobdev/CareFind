@@ -126,8 +126,11 @@
   // that payer's network directory — NOT that a specific plan is accepted — so it is
   // deliberately never labeled "Confirmed". Only a plan-level program (e.g. Medicare)
   // earns "Confirmed". Estimated answers are always "Likely", never confirmed.
+  // `filterable` (the plan's discriminating flag, A4) distinguishes a regional
+  // estimate that can actually narrow results from a national "operates everywhere"
+  // estimate that can't — the latter is honestly labeled area context, not a match.
   // Returns {cls, text} or null when there's nothing to show.
-  function coverageStatus(info){
+  function coverageStatus(info, filterable){
     if(!info) return null;
     const v=info.value, level=info.level||'payer';
     if(info.confidence==='verified'){
@@ -139,8 +142,10 @@
         : {cls:'no', text:'Not listed'};
       return {cls:'unknown', text:'Unverified'};
     }
-    return v===true ? {cls:'likely', text:'Likely · confirm'}
-                    : {cls:'unknown', text:'Unverified'};
+    if(v===true) return filterable===false
+      ? {cls:'likely', text:'Operates in your area'}
+      : {cls:'likely', text:'Likely · confirm'};
+    return {cls:'unknown', text:'Unverified'};
   }
 
   // Format an epoch-seconds timestamp as a short, stable date for the "checked

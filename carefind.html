@@ -995,7 +995,9 @@ function renderInsuranceFilter(){
       const on=state.selectedPlans.includes(pl.id);
       const conf=pl.confidence==='verified'?'verified':'estimated';
       const title=conf!=='verified'
-        ? 'Estimated — confirm with the provider'
+        ? (pl.filterable===false
+            ? 'Operates in your area — context only, won’t narrow results'
+            : 'Estimated — confirm with the provider')
         : (pl.level==='plan'
             ? 'Verified from a real source'
             : 'Verified network directory — confirm your specific plan');
@@ -1188,7 +1190,11 @@ function insuranceBadgesHtml(doc){
         out.push(`<span class="ins-badge innet">${esc(planLabel(id))} · in-network</span>`); // payer network listing, not plan acceptance
       }
     } else if(state.insMode==='any' && state.selectedPlans.includes(id)){
-      out.push(`<span class="ins-badge likely">${esc(planLabel(id))} · likely</span>`); // amber, only when estimates are opted into AND filtered
+      const pm=planMeta(id);
+      const txt=(pm && pm.filterable===false)
+        ? `${esc(planLabel(id))} · operates here`   // national estimate: area context, not a provider-specific match
+        : `${esc(planLabel(id))} · likely`;
+      out.push(`<span class="ins-badge likely">${txt}</span>`); // amber, only when estimates are opted into AND filtered
     }
   }
   return out.join('');
@@ -1208,7 +1214,8 @@ function coverageHtml(doc, insSearch){
     });
     const items=ids.map(id=>{
       const info=ins[id];
-      const s=coverageStatus(info);
+      const pm=planMeta(id);
+      const s=coverageStatus(info, pm?pm.filterable:undefined);
       const status=`<span class="cov-status ${s.cls}">${esc(s.text)}</span>`;
       // Provenance: a verified answer always carries a source URL + fetch date, so
       // the patient can verify it at the real source (the A3 trust rule).
@@ -1314,7 +1321,12 @@ function estimatedFilterHint(){
     return state.selectedPlans.some(id=>ins[id] && ins[id].value===true && ins[id].confidence==='verified');
   });
   if(anyVerified) return '';
-  return ` <span class="results-hint">· estimated matches show plans likely available in this area, not confirmed for each provider</span>`;
+  // If every selected estimate is a national "operates here" payer, it didn't narrow
+  // the list at all — say so plainly rather than implying these are matches.
+  const allContext=state.selectedPlans.every(id=>{ const pm=planMeta(id); return pm && pm.filterable===false; });
+  return allContext
+    ? ` <span class="results-hint">· these payers operate in your area but don’t narrow results — confirm acceptance with each provider</span>`
+    : ` <span class="results-hint">· estimated matches show plans likely available in this area, not confirmed for each provider</span>`;
 }
 function updateResultsBar(){
   const bar=document.getElementById('results-bar');

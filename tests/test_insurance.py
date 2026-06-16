@@ -146,6 +146,28 @@ async def test_annotate_results_carry_level(temp_db):
     assert ann["1003000126"]["aetna"]["level"] == "payer"
 
 
+# ── A4: national "operates here" estimates are non-filtering ───────────────────
+def test_plans_mark_national_estimates_non_filterable(temp_db):
+    """A national estimate can't narrow results, so it's flagged non-filterable;
+    a regional estimate and any verified plan stay filterable."""
+    db.medicare_add_many(["1003000126"])
+    reg = _build()
+    by_id = {p["id"]: p for p in reg.plans()}
+    assert by_id["aetna"]["filterable"] is False        # national estimate
+    assert by_id["kaiser"]["filterable"] is True         # regional estimate (CA, CO, …)
+    assert by_id["premera_bcbs"]["filterable"] is True   # regional estimate (WA/AK)
+    assert by_id["medicare"]["filterable"] is True       # verified
+
+
+def test_verified_estimate_for_same_payer_is_filterable(temp_db):
+    """If a national payer gains a verified source, the plan becomes filterable again
+    (the verified source discriminates)."""
+    db.tic_add_many("aetna", ["1003000126"])
+    reg = _build()
+    by_id = {p["id"]: p for p in reg.plans()}
+    assert by_id["aetna"]["filterable"] is True
+
+
 # ── A3: every verified answer carries source URL + fetch date ──────────────────
 @pytest.mark.asyncio
 async def test_verified_medicare_carries_provenance(temp_db):
