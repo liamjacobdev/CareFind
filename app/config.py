@@ -69,6 +69,11 @@ class Settings:
         self.fhir_cache_ttl = int(os.environ.get("CAREFIND_FHIR_CACHE_TTL", str(24 * 3600)))
         self.fhir_cache_unknown_ttl = int(os.environ.get("CAREFIND_FHIR_CACHE_UNKNOWN_TTL", "600"))
 
+        # Short TTL for the NPPES search-result cache (C4). Kept brief because the public
+        # registry changes and a search is interactive; long enough to absorb pagination
+        # and repeat queries within a session.
+        self.nppes_cache_ttl = int(os.environ.get("CAREFIND_NPPES_CACHE_TTL", "120"))
+
         # How strict the FHIR Plan-Net "in-network" determination is.
         #   "network"  (default) — a Confirmed answer requires an *active*
         #       PractitionerRole that links to a network. A role that is listed but

@@ -91,6 +91,9 @@ class InsuranceSource:
     # "plan"  — the answer is about a specific, single plan/program (e.g. Medicare
     #   Original): a True here is a genuine plan-level confirmation.
     level = "payer"
+    # Geographic scope: None -> national; a set of state codes -> regional. Verified
+    # regional sources (FhirPlanNetSource) set it; used by the coverage report (C4).
+    states: set[str] | None = None
     # A public URL a patient can follow to verify this source themselves. Verified
     # sources populate it; it backs the "Verify · checked <date>" deep link (A3).
     source_url = ""

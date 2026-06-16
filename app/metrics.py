@@ -28,6 +28,7 @@ def snapshot() -> dict[str, Any]:
         d = dict(_counts)
     g_hit, g_miss = d.get("geocode_hit", 0), d.get("geocode_miss", 0)
     f_hit, f_miss = d.get("fhir_hit", 0), d.get("fhir_miss", 0)
+    n_hit, n_miss = d.get("nppes_hit", 0), d.get("nppes_miss", 0)
     return {
         "requests_total": d.get("requests_total", 0),
         "requests_by_status": {
@@ -35,6 +36,7 @@ def snapshot() -> dict[str, Any]:
         },
         "geocode_cache": {"hits": g_hit, "misses": g_miss, "hit_rate": _rate(g_hit, g_miss)},
         "fhir_cache": {"hits": f_hit, "misses": f_miss, "hit_rate": _rate(f_hit, f_miss)},
+        "nppes_cache": {"hits": n_hit, "misses": n_miss, "hit_rate": _rate(n_hit, n_miss)},
         "upstream_errors": d.get("upstream_error", 0),
     }
 

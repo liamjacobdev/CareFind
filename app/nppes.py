@@ -5,11 +5,21 @@ the public CORS-proxy fallbacks out of the hot path and lets us shape errors.
 The query mapping mirrors the frontend's buildNpiParams() exactly so results are
 identical whether the page runs standalone or backed by this API.
 """
+import json
 from typing import Any
 
 import httpx
 
+from . import metrics
+from .cache import build_cache
 from .config import settings
+
+# Short-TTL cache of NPPES search results (C4), keyed on the effective query params. An
+# identical repeat search (common: pagination, a user re-running the same query, the
+# providers/search + npi paths overlapping) is served from here, making zero live calls
+# and sparing the public registry. Behind the B2 CacheBackend seam, so it can be shared
+# across workers via Redis without touching this code.
+_cache = build_cache()
 
 
 def _wild(value: str) -> str:
@@ -90,10 +100,27 @@ def build_params(q: dict[str, Any]) -> dict[str, Any]:
 
 
 async def search(q: dict[str, Any]) -> list[Any]:
-    """Return the raw NPPES `results` list (the frontend/normalizer consumes it)."""
+    """Return the raw NPPES `results` list (the frontend/normalizer consumes it).
+
+    Cached on the effective query params with a short TTL: an identical repeat search is
+    served without a live call. A bad query raises before the cache (build_params), and
+    only successful results are cached — a transient upstream failure is never pinned."""
+    params = build_params(q)
+    key = "nppes:" + json.dumps(params, sort_keys=True)
+    cached = _cache.get(key)
+    if isinstance(cached, list):
+        metrics.incr("nppes_hit")
+        return cached
+    metrics.incr("nppes_miss")
+    results = await _live_search(params)
+    _cache.set(key, results, settings.nppes_cache_ttl)
+    return results
+
+
+async def _live_search(params: dict[str, Any]) -> list[Any]:
+    """One NPPES query (with a single retry); raises on a bad query or unreachable upstream."""
     import asyncio
 
-    params = build_params(q)
     headers = {"Accept": "application/json", "User-Agent": settings.contact_ua}
     last_exc = None
     async with httpx.AsyncClient(timeout=18) as client:

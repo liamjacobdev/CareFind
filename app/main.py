@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
-from . import db, geocode, metrics, nppes
+from . import coverage, db, geocode, metrics, nppes
 from .config import settings
 from .insurance import registry
 from .ratelimit import build_rate_limiter
@@ -300,9 +300,17 @@ def admin_ingest(
 
 @app.get("/metrics")
 def metrics_endpoint() -> dict[str, Any]:
-    """In-process operational metrics: request counts by status, geocode/FHIR cache
-    hit rates, and upstream error count. Not under /api/, so it isn't rate-limited."""
+    """In-process operational metrics: request counts by status, geocode/FHIR/NPPES
+    cache hit rates, and upstream error count. Not under /api/, so it isn't rate-limited."""
     return metrics.snapshot()
+
+
+@app.get("/coverage")
+def coverage_endpoint() -> dict[str, Any]:
+    """Verified-coverage-by-state report (C4): which verified programs are available in
+    each state, plus the verified-record counts. Computed live, so it reflects the
+    current data after every ingest."""
+    return coverage.coverage_report(registry)
 
 
 @app.get("/api/insurance/plans")
