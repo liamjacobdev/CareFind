@@ -14,6 +14,26 @@ a misleading "Confirmed" is worse than an honest "we don't know."
 - **Don't ship what you can't verify.** Every change needs a test or a documented
   manual check.
 
+### The trust rules are executable
+
+These promises are not just prose — they are enforced by `tests/test_trust_rules.py`,
+which fails CI if any code path can overclaim. Read that file before touching the
+insurance layer; if you add a branch, extend the relevant rule. The invariants:
+
+1. **Presence ≠ Confirmed.** A FHIR directory hit is True only for an *active*
+   `PractitionerRole` with a resolvable network link (`healthcareService` doesn't
+   count). Listed-but-unconfirmable is `None`, not a yes.
+2. **Unknown stays unknown.** A cached/unknown answer maps to `None`, never to True
+   and never to a "no".
+3. **Estimates can't masquerade.** The estimated tier only ever emits True/None (never
+   False), always carries `confidence: "estimated"`, and never carries provenance.
+4. **Every verified True is traceable.** It always carries a non-empty `source_url`
+   and `fetched_at` (the verify-link provenance).
+5. **Payer ≠ plan.** A payer-directory listing (`level: "payer"`) is rendered as
+   "In-network", never "Confirmed" — only a single-program plan (`level: "plan"`) is.
+6. **Non-discriminating estimates don't filter.** A national "operates everywhere"
+   estimate is context, not a filter, so it can't imply provider-specific acceptance.
+
 ## Dev setup
 
 ```bash
