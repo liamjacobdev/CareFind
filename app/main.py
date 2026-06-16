@@ -193,6 +193,9 @@ _FRONTEND = Path(__file__).resolve().parent.parent / "carefind.html"
 
 _FRONTEND_LOGIC = _FRONTEND.parent / "carefind.logic.js"
 _FRONTEND_BUNDLE = _FRONTEND.parent / "carefind.bundle.js"
+_MANIFEST = _FRONTEND.parent / "manifest.webmanifest"
+_SERVICE_WORKER = _FRONTEND.parent / "sw.js"
+_ICON = _FRONTEND.parent / "carefind-icon.svg"
 
 
 def _static_file(request: Request, path: Path, media_type: str, missing: str) -> Response:
@@ -229,6 +232,26 @@ def frontend_logic(request: Request) -> Response:
     # and the unit-tested source (Vitest). Still served for source transparency.
     return _static_file(request, _FRONTEND_LOGIC, "application/javascript",
                         "carefind.logic.js not found next to the app package.")
+
+
+# ── PWA assets (D1): manifest, service worker, icon ──────────────────────────
+@app.get("/manifest.webmanifest")
+def manifest(request: Request) -> Response:
+    return _static_file(request, _MANIFEST, "application/manifest+json",
+                        "manifest.webmanifest not found next to the app package.")
+
+
+@app.get("/sw.js")
+def service_worker(request: Request) -> Response:
+    # Served from the root so its scope covers the whole app.
+    return _static_file(request, _SERVICE_WORKER, "application/javascript",
+                        "sw.js not found next to the app package.")
+
+
+@app.get("/carefind-icon.svg")
+def app_icon(request: Request) -> Response:
+    return _static_file(request, _ICON, "image/svg+xml",
+                        "carefind-icon.svg not found next to the app package.")
 
 
 def _data_freshness() -> dict[str, Any]:

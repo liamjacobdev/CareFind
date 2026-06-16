@@ -147,6 +147,24 @@ def test_bundle_served_and_page_has_no_inline_logic(client):
     assert "addEventListener" in bundle.text           # app code bundled in
 
 
+def test_pwa_assets_served(client):
+    """D1: the PWA shell — manifest, service worker, icon — is served so the app is
+    installable and works offline. The page links the manifest and theme-color."""
+    page = client.get("/").text
+    assert 'rel="manifest"' in page and 'name="theme-color"' in page
+
+    m = client.get("/manifest.webmanifest")
+    assert m.status_code == 200 and "manifest" in m.headers["content-type"]
+    assert m.json()["start_url"] == "/" and m.json()["display"] == "standalone"
+
+    sw = client.get("/sw.js")
+    assert sw.status_code == 200 and "javascript" in sw.headers["content-type"]
+    assert "addEventListener" in sw.text and "carefind-shell" in sw.text
+
+    icon = client.get("/carefind-icon.svg")
+    assert icon.status_code == 200 and icon.headers["content-type"].startswith("image/svg")
+
+
 @pytest.mark.parametrize("path", ["/", "/carefind.logic.js", "/carefind.bundle.js"])
 def test_static_files_etag_304(client, path):
     """T4.2: static frontend files carry an ETag + Cache-Control, and a repeat load

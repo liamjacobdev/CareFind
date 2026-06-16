@@ -26,6 +26,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Cpath d='M18 2C11.4 2 6 7.3 6 13.9 6 22.6 18 34 18 34s12-11.4 12-20.1C30 7.3 24.6 2 18 2Z' fill='%230f7a5f'/%3E%3Cpath d='M18 9.2v9.4M13.3 13.9h9.4' stroke='%23fff' stroke-width='3.1' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <!-- PWA (D1): installable + offline app shell. -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0f7a5f" />
+  <link rel="apple-touch-icon" href="/carefind-icon.svg" />
 
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"WebApplication","name":"CareFind","applicationCategory":"HealthApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"Search the official US CMS NPPES registry of licensed healthcare providers by location, specialty, or name."}
@@ -208,7 +212,12 @@
   /* ── Provider card ── */
   .provider-card { background:var(--card); border:1px solid var(--border); border-radius:var(--r-md);
     padding:.9rem .95rem .9rem 1.1rem; cursor:pointer; position:relative; box-shadow:var(--shadow-sm);
-    transition:border-color .18s var(--ease),box-shadow .22s var(--ease),transform .22s var(--ease-out); overflow:hidden; }
+    transition:border-color .18s var(--ease),box-shadow .22s var(--ease),transform .22s var(--ease-out); overflow:hidden;
+    /* Native virtualization (D1): skip layout/paint of off-screen cards so a 1,000-row
+       list scrolls at 60fps, while keeping variable heights, a11y, focus, and find-in-page.
+       `auto` height is remembered after first paint, so the scrollbar stays accurate and
+       CLS ~ 0. Browsers without support just render normally. */
+    content-visibility:auto; contain-intrinsic-size:auto 128px; }
   .provider-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent,var(--jade)); opacity:0; transition:opacity .18s var(--ease); }
   .provider-card:hover { border-color:var(--border-2); box-shadow:var(--shadow-md); transform:translateY(-2px); }
   .provider-card:hover::before { opacity:.55; }

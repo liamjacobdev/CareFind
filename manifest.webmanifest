@@ -1,0 +1,13 @@
+{
+  "name": "CareFind — provider registry search",
+  "short_name": "CareFind",
+  "description": "Search the official US CMS NPPES registry of licensed providers, with verified insurance filters.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f9f8",
+  "theme_color": "#0f7a5f",
+  "icons": [
+    { "src": "/carefind-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
