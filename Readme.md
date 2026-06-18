@@ -203,6 +203,15 @@ every push.
 
 ## What was tested vs. what needs your network
 Verified here with an automated suite: app boots, DB/ingest (Medicare + TiC), the insurance confidence model (verified vs estimated, regional gating, verified-supersedes-estimate, post-startup TiC ingest with no restart), FHIR `check_many` mapping (mocked), the geocoder source chain (Census primary, Nominatim fallback, SQLite cache — mocked), NPPES param building incl. radius widening, per-client rate limiting behind a proxy, the batch-geocode cap, the `normalize()` golden shape, and server-authoritative radius search (out-of-radius dropped, distance-sorted, closest survive truncation) end-to-end against a mocked registry. **Not** reachable from the build sandbox, so verify in your environment: live NPPES results, live geocoding, and each payer's FHIR endpoint. The code paths and error handling for those are in place.
+## Documentation
+- [docs/architecture.md](docs/architecture.md) — components, data flow, the two-tier model, the seams.
+- [docs/adr/](docs/adr/) — Architecture Decision Records for the load-bearing choices.
+- [docs/runbook.md](docs/runbook.md) — zero→running (<15 min), ingest, backup/restore, incident response.
+- [docs/threat-model.md](docs/threat-model.md) — assets, threats, mitigations, residual risks.
+- [docs/a11y-walkthrough.md](docs/a11y-walkthrough.md) — WCAG 2.2 AA checklist + SR walkthrough.
+- [docs/provenance.md](docs/provenance.md) — auto-generated ledger of validated public endpoints.
+- API: live Swagger at `/docs`, schema at `/openapi.json`; the committed [docs/openapi.json](docs/openapi.json) is kept current by a test.
+
 ## Contributing & License
 Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup, the
 test layout, and the trust rules (verified vs. estimated is sacred; never ship what you

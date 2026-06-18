@@ -74,3 +74,14 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Link-check docs (relative links — E2)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          # --offline checks the relative/file links we control (not flaky external URLs).
+          args: "--offline --no-progress Readme.md CONTRIBUTING.md docs/**/*.md"
+          fail: true

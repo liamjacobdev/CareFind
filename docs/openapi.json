@@ -1,0 +1,863 @@
+{
+  "components": {
+    "schemas": {
+      "BatchReq": {
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "BatchReq",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "CareFind API",
+    "version": "3.1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "index__get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Index"
+      }
+    },
+    "/admin/ingest": {
+      "post": {
+        "description": "Token-secured refresh trigger for the scheduled ingest cron. Disabled (404) until\nCAREFIND_ADMIN_TOKEN is set; the ingest runs in the background so the cron returns\npromptly. Not under /api/, so it isn't rate-limited.",
+        "operationId": "admin_ingest_admin_ingest_post",
+        "parameters": [
+          {
+            "description": "all | tic | medicare",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "all | tic | medicare",
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Admin Ingest Admin Ingest Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Admin Ingest"
+      }
+    },
+    "/api/geocode": {
+      "get": {
+        "description": "Geocode a free-text `q`, or a structured {postalcode, city, state}. The\nfrontend sends the structured form for the map center, so accept both rather\nthan 422-ing on a missing `q`.",
+        "operationId": "api_geocode_api_geocode_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "postalcode",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Postalcode",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "city",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "City",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Geocode Api Geocode Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Geocode"
+      }
+    },
+    "/api/geocode/batch": {
+      "post": {
+        "operationId": "api_geocode_batch_api_geocode_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Geocode Batch Api Geocode Batch Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Geocode Batch"
+      }
+    },
+    "/api/insurance/plans": {
+      "get": {
+        "description": "Filterable plans \u2014 flat list plus grouped by coverage category. Each plan\ncarries a `confidence` of 'verified' or 'estimated'.",
+        "operationId": "insurance_plans_api_insurance_plans_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Insurance Plans Api Insurance Plans Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Insurance Plans"
+      }
+    },
+    "/api/insurance/{npi}": {
+      "get": {
+        "description": "Coverage for one NPI. Estimated-tier plans need a `state` to resolve;\nwithout it only verified answers appear.",
+        "operationId": "insurance_for_api_insurance__npi__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "npi",
+            "required": true,
+            "schema": {
+              "title": "Npi",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Insurance For Api Insurance  Npi  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Insurance For"
+      }
+    },
+    "/api/npi": {
+      "get": {
+        "operationId": "api_npi_api_npi_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "zip",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Zip",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "city",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "City",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "npi",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Npi",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "taxonomy",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Taxonomy",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Npi Api Npi Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Npi"
+      }
+    },
+    "/api/providers/search": {
+      "get": {
+        "description": "One call: query NPPES, attach insurance flags (verified + estimated), then \u2014\nfor a radius search \u2014 geocode the candidate pool, keep only providers truly\nwithin `radius` miles of the ZIP center, sort by distance, and return ranked\nresults with coordinates already attached. The backend is authoritative for the\nradius boundary; the frontend plots the returned pins without re-geocoding.",
+        "operationId": "providers_search_api_providers_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "zip",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Zip",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "city",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "City",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "npi",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Npi",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "taxonomy",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Taxonomy",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Miles from the ZIP center to keep; 0 disables distance filtering",
+            "in": "query",
+            "name": "radius",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Miles from the ZIP center to keep; 0 disables distance filtering",
+              "title": "Radius",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Comma-separated plan ids the provider must accept, e.g. 'medicare,aetna'",
+            "in": "query",
+            "name": "accepts",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Comma-separated plan ids the provider must accept, e.g. 'medicare,aetna'",
+              "title": "Accepts",
+              "type": "string"
+            }
+          },
+          {
+            "description": "'verified' = require confirmed acceptance; 'any' = also allow estimated matches",
+            "in": "query",
+            "name": "accepts_mode",
+            "required": false,
+            "schema": {
+              "default": "verified",
+              "description": "'verified' = require confirmed acceptance; 'any' = also allow estimated matches",
+              "title": "Accepts Mode",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "geocode",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Geocode",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Providers Search Api Providers Search Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Providers Search"
+      }
+    },
+    "/api/reverse": {
+      "get": {
+        "operationId": "api_reverse_api_reverse_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "lat",
+            "required": true,
+            "schema": {
+              "title": "Lat",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lon",
+            "required": true,
+            "schema": {
+              "title": "Lon",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Reverse Api Reverse Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Reverse"
+      }
+    },
+    "/carefind-icon.svg": {
+      "get": {
+        "operationId": "app_icon_carefind_icon_svg_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "App Icon"
+      }
+    },
+    "/carefind.bundle.js": {
+      "get": {
+        "operationId": "frontend_bundle_carefind_bundle_js_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Frontend Bundle"
+      }
+    },
+    "/carefind.config.js": {
+      "get": {
+        "operationId": "frontend_config_carefind_config_js_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Frontend Config"
+      }
+    },
+    "/carefind.logic.js": {
+      "get": {
+        "operationId": "frontend_logic_carefind_logic_js_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Frontend Logic"
+      }
+    },
+    "/coverage": {
+      "get": {
+        "description": "Verified-coverage-by-state report (C4): which verified programs are available in\neach state, plus the verified-record counts. Computed live, so it reflects the\ncurrent data after every ingest.",
+        "operationId": "coverage_endpoint_coverage_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Coverage Endpoint Coverage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Coverage Endpoint"
+      }
+    },
+    "/healthz": {
+      "get": {
+        "description": "Liveness + data-freshness. Flips to 503 (the dead-man's-switch an uptime monitor\nwatches) when a tracked source has gone stale past its SLO.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Healthz Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz"
+      }
+    },
+    "/manifest.webmanifest": {
+      "get": {
+        "operationId": "manifest_manifest_webmanifest_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Manifest"
+      }
+    },
+    "/metrics": {
+      "get": {
+        "description": "In-process operational metrics: request counts by status, geocode/FHIR/NPPES\ncache hit rates, and upstream error count. Protected by the admin token when one is\nconfigured (set CAREFIND_ADMIN_TOKEN in production); open in dev when unset.",
+        "operationId": "metrics_endpoint_metrics_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Metrics Endpoint Metrics Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Metrics Endpoint"
+      }
+    },
+    "/readyz": {
+      "get": {
+        "description": "Readiness (D4): is the datastore reachable and the registry built? A load\nbalancer routes traffic only while this is 200, so a worker that can't reach its\ndatastore is pulled instead of serving errors.",
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Readyz Readyz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Readyz"
+      }
+    },
+    "/sw.js": {
+      "get": {
+        "operationId": "service_worker_sw_js_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Service Worker"
+      }
+    }
+  }
+}

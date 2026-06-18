@@ -128,6 +128,18 @@ async def test_geocode_breaker_degrades_to_no_coords(temp_db, monkeypatch):
     assert geocode._geo_breaker.state == "open"
 
 
+def test_openapi_spec_is_published_and_current(client):
+    """E2: the committed docs/openapi.json must match the live app schema. Regenerate
+    with: python -c \"import json;from app.main import app;\\
+    open('docs/openapi.json','w').write(json.dumps(app.openapi(),indent=2,sort_keys=True)+'\\n')\""""
+    committed = (Path(__file__).parent.parent / "docs" / "openapi.json").read_text(encoding="utf-8")
+    live = json.dumps(main.app.openapi(), indent=2, sort_keys=True) + "\n"
+    assert committed == live, "docs/openapi.json is stale — regenerate it (see this test's docstring)."
+    # And the API is browsable: FastAPI serves the live schema + Swagger UI.
+    assert client.get("/openapi.json").status_code == 200
+    assert client.get("/docs").status_code == 200
+
+
 def test_readyz_reports_ready(client):
     """D4 readiness: datastore reachable + registry built."""
     r = client.get("/readyz")
