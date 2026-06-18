@@ -31,6 +31,23 @@ def _conn() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+def backup(dest_path: str) -> str:
+    """Take a consistent online backup of the SQLite DB to `dest_path` (E3). Uses
+    SQLite's backup API, so it's safe while the app is running (WAL-consistent). Returns
+    the destination path. Prod also runs continuous replication (Litestream); this is the
+    programmatic primitive behind the documented restore drill."""
+    src = _connect()
+    try:
+        dest = sqlite3.connect(dest_path)
+        try:
+            src.backup(dest)
+        finally:
+            dest.close()
+    finally:
+        src.close()
+    return dest_path
+
+
 def init_db() -> None:
     with _conn() as conn:
         # WAL is a persistent, DB-level setting written to the file header — set it

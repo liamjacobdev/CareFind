@@ -23,14 +23,31 @@ services:
     expose:
       - "8000"
     healthcheck:
-      # Uses the stdlib (the slim image has no curl). /healthz is unauthenticated
-      # and not under /api/, so it isn't rate-limited.
+      # Container liveness uses /readyz (datastore reachable + registry built), NOT
+      # /healthz: /healthz returns 503 on STALE DATA (the dead-man's-switch an uptime
+      # monitor watches), which must not trigger a container restart — a restart doesn't
+      # fix staleness, only a re-ingest does. Stdlib (the slim image has no curl).
       test: ["CMD", "python", "-c",
-             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"]
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/readyz').status==200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  # Optional continuous backup (E3): replicate the SQLite DB to free object storage so a
+  # restore is one command. Copy litestream.yml.example -> litestream.yml (set the
+  # bucket/endpoint + path: /data/carefind.db), put LITESTREAM_ACCESS_KEY_ID /
+  # LITESTREAM_SECRET_ACCESS_KEY in .env, then uncomment. Restore:
+  #   docker compose run --rm litestream restore -o /data/carefind.db replica
+  # litestream:
+  #   image: litestream/litestream:0.3
+  #   restart: unless-stopped
+  #   depends_on: [api]
+  #   env_file: .env
+  #   volumes:
+  #     - carefind-data:/data
+  #     - ./litestream.yml:/etc/litestream.yml:ro
+  #   command: replicate -config /etc/litestream.yml
 
   caddy:
     image: caddy:2
