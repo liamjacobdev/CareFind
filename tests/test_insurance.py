@@ -3,7 +3,7 @@ import httpx
 import pytest
 import respx
 
-from app import db, insurance
+from app import db, sources
 from app.config import settings
 from app.insurance import EstimatedPayerSource, FhirPlanNetSource, Registry
 
@@ -87,7 +87,7 @@ async def test_tic_ingest_after_build_surfaces_without_restart(temp_db, monkeypa
     """A TiC payer ingested AFTER the registry is built must surface as verified
     without a rebuild/restart — consistent with how Medicare already behaves."""
     # Bypass the short availability TTL so the post-ingest state is visible at once.
-    monkeypatch.setattr(insurance, "_AVAILABILITY_TTL", 0.0)
+    monkeypatch.setattr(sources, "_AVAILABILITY_TTL", 0.0)
     reg = _build()  # built with no TiC data
 
     before = await reg.annotate([{"npi": "1003000126", "stateAb": "CA"}], only=["aetna"])

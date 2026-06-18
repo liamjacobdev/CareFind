@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app import db, main, metrics
+from app import db, main, metrics, routes_ops
 
 _GOLDEN = json.loads(
     (Path(__file__).parent / "fixtures" / "normalize_golden.json").read_text(encoding="utf-8")
@@ -151,18 +151,18 @@ def test_trigger_ingest_handles_all_sources(client, monkeypatch, tmp_path):
     medicare with no URL is skipped, and a configured medicare URL is ingested."""
     # tic with no configured sources -> ingest_tic_job.run() raises SystemExit, caught.
     monkeypatch.setattr(main.settings, "tic_sources_file", str(tmp_path / "none.json"))
-    main._trigger_ingest("tic")  # must not raise
+    routes_ops._trigger_ingest("tic")  # must not raise
 
     # medicare with no URL -> logged-skip branch.
     monkeypatch.setattr(main.settings, "medicare_ingest_url", "")
-    main._trigger_ingest("medicare")
+    routes_ops._trigger_ingest("medicare")
 
     # medicare with a URL -> calls the ingest (mocked so no network).
     called = {}
     monkeypatch.setattr(main.settings, "medicare_ingest_url", "https://cms.example/file.csv")
     import app.ingest_medicare as im
     monkeypatch.setattr(im, "ingest", lambda url: called.setdefault("url", url) or 5)
-    main._trigger_ingest("medicare")
+    routes_ops._trigger_ingest("medicare")
     assert called["url"] == "https://cms.example/file.csv"
 
 
@@ -191,7 +191,7 @@ def test_admin_ingest_requires_token(client, monkeypatch):
     # Configured -> wrong/missing token rejected, correct token schedules the ingest.
     monkeypatch.setattr(main.settings, "admin_token", "s3cret")
     called = {}
-    monkeypatch.setattr(main, "_trigger_ingest", lambda source: called.setdefault("source", source))
+    monkeypatch.setattr(routes_ops, "_trigger_ingest", lambda source: called.setdefault("source", source))
     assert client.post("/admin/ingest?source=tic").status_code == 403
     assert client.post("/admin/ingest?source=tic",
                        headers={"Authorization": "Bearer wrong"}).status_code == 403

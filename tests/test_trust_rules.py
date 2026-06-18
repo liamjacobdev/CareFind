@@ -13,14 +13,10 @@ import httpx
 import pytest
 import respx
 
-from app import db, insurance
+from app import db
 from app.config import settings
-from app.insurance import (
-    _FHIR_STR_TO_VALUE,
-    EstimatedPayerSource,
-    FhirPlanNetSource,
-    Registry,
-)
+from app.insurance import EstimatedPayerSource, FhirPlanNetSource, Registry
+from app.sources import _CONFIDENCE_RANK, _FHIR_STR_TO_VALUE
 
 _IN_NETWORK = {"entry": [{"resource": {"resourceType": "PractitionerRole",
                                        "active": True, "network": [{"reference": "Network/x"}]}}]}
@@ -145,4 +141,4 @@ async def test_estimated_results_never_verified_or_provenanced(temp_db):
 def test_confidence_rank_keeps_verified_above_estimated():
     """The merge ranking that lets a verified answer supersede an estimate must hold —
     if this inverts, an estimate could mask a real verified/False answer."""
-    assert insurance._CONFIDENCE_RANK["verified"] > insurance._CONFIDENCE_RANK["estimated"]
+    assert _CONFIDENCE_RANK["verified"] > _CONFIDENCE_RANK["estimated"]
