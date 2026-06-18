@@ -12,14 +12,20 @@ const RUNTIME_MAX = 120; // cap runtime entries (tiles/libs) so storage can't gr
 const SHELL = ['/', '/carefind.bundle.js', '/carefind.logic.js', '/manifest.webmanifest', '/carefind-icon.svg'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches
+      .open(CACHE)
+      .then((c) => c.addAll(SHELL))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys()
+    caches
+      .keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== RUNTIME).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
+      .then(() => self.clients.claim()),
   );
 });
 

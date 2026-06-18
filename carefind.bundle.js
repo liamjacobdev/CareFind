@@ -18,24 +18,35 @@
   var TAXONOMY_MAP = {
     "Family Medicine": "Family Medicine",
     "Internal Medicine": "Internal Medicine",
-    "Pediatrics": "Pediatrics",
-    "Cardiology": "Cardiovascular Disease",
-    "Orthopaedic": "Orthopaedic Surgery",
-    "Dermatology": "Dermatology",
-    "Obstetrics": "Obstetrics & Gynecology",
-    "Psychiatry": "Psychiatry",
-    "Neurology": "Neurology",
+    Pediatrics: "Pediatrics",
+    Cardiology: "Cardiovascular Disease",
+    Orthopaedic: "Orthopaedic Surgery",
+    Dermatology: "Dermatology",
+    Obstetrics: "Obstetrics & Gynecology",
+    Psychiatry: "Psychiatry",
+    Neurology: "Neurology",
     "Hematology & Oncology": "Hematology & Oncology",
-    "Ophthalmology": "Ophthalmology",
-    "Urology": "Urology",
-    "Endocrinology": "Endocrinology, Diabetes & Metabolism",
-    "Gastroenterology": "Gastroenterology",
-    "Dentist": "Dentist",
+    Ophthalmology: "Ophthalmology",
+    Urology: "Urology",
+    Endocrinology: "Endocrinology, Diabetes & Metabolism",
+    Gastroenterology: "Gastroenterology",
+    Dentist: "Dentist",
     "Physical Therapist": "Physical Therapist",
     "Nurse Practitioner": "Nurse Practitioner",
-    "Chiropractor": "Chiropractor"
+    Chiropractor: "Chiropractor"
   };
-  var PALETTE = ["#0f7a5f", "#2563a8", "#7c5ce0", "#a8551e", "#b8344f", "#3f7d3a", "#0e6f8a", "#9a5ab0", "#92681a", "#1f8a6d"];
+  var PALETTE = [
+    "#0f7a5f",
+    "#2563a8",
+    "#7c5ce0",
+    "#a8551e",
+    "#b8344f",
+    "#3f7d3a",
+    "#0e6f8a",
+    "#9a5ab0",
+    "#92681a",
+    "#1f8a6d"
+  ];
   function toTitleCase(s) {
     if (!s) return "";
     return s.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()).replace(/\b(Ii|Iii|Iv|Md|Do|Pa|Np|Dds|Dpm|Llc|Pllc|Pc|Pa-C|Dnp|Rn)\b/g, (m) => m.toUpperCase());
@@ -111,8 +122,19 @@
       const addrs = r.addresses || [];
       const loc = addrs.find((a) => a.address_purpose === "LOCATION") || addrs[0] || {};
       const mail = addrs.find((a) => a.address_purpose === "MAILING");
-      const fmtAddr = (a) => a ? [toTitleCase([a.address_1, a.address_2].filter(Boolean).join(" ")), toTitleCase(a.city || ""), a.state, (a.postal_code || "").substring(0, 5)].filter(Boolean).join(", ") : "";
-      const taxes = (r.taxonomies || []).map((t) => ({ desc: t.desc || "", code: t.code || "", primary: !!t.primary, state: t.state || "", license: t.license || "" }));
+      const fmtAddr = (a) => a ? [
+        toTitleCase([a.address_1, a.address_2].filter(Boolean).join(" ")),
+        toTitleCase(a.city || ""),
+        a.state,
+        (a.postal_code || "").substring(0, 5)
+      ].filter(Boolean).join(", ") : "";
+      const taxes = (r.taxonomies || []).map((t) => ({
+        desc: t.desc || "",
+        code: t.code || "",
+        primary: !!t.primary,
+        state: t.state || "",
+        license: t.license || ""
+      }));
       const primary = taxes.find((t) => t.primary) || taxes[0] || { desc: "Healthcare Provider" };
       const phoneRaw = (loc.telephone_number || "").replace(/\D/g, "");
       return {
@@ -186,7 +208,8 @@
       if (v === false) return level === "plan" ? { cls: "no", text: "Not enrolled" } : { cls: "no", text: "Not listed" };
       return { cls: "unknown", text: "Unverified" };
     }
-    if (v === true) return filterable === false ? { cls: "likely", text: "Operates in your area" } : { cls: "likely", text: "Likely · confirm" };
+    if (v === true)
+      return filterable === false ? { cls: "likely", text: "Operates in your area" } : { cls: "likely", text: "Likely · confirm" };
     return { cls: "unknown", text: "Unverified" };
   }
   function fmtDate(epochSeconds) {
@@ -214,10 +237,6 @@
   // src/main.js
   var {
     TAXONOMY_MAP: TAXONOMY_MAP2,
-    PALETTE: PALETTE2,
-    toTitleCase: toTitleCase2,
-    formatPhone: formatPhone2,
-    hashStr: hashStr2,
     haversine: haversine2,
     cssEsc: cssEsc2,
     esc: esc2,
@@ -230,12 +249,82 @@
   var LS_KEY = "carefind_saved_v4";
   var GEO_KEY = "carefind_geocache_v1";
   var CHECK_SVG = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-  var US_STATES = ["AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC", "PR"];
-  var LEAFLET_CSS = ["https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css", "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"];
-  var LEAFLET_JS = ["https://unpkg.com/leaflet@1.9.4/dist/leaflet.js", "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js", "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"];
-  var CLUSTER_CSS = ["https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css", "https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css"];
-  var CLUSTER_CSS2 = ["https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css", "https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.min.css"];
-  var CLUSTER_JS = ["https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js", "https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"];
+  var US_STATES = [
+    "AL",
+    "AK",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "FL",
+    "GA",
+    "HI",
+    "ID",
+    "IL",
+    "IN",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "ME",
+    "MD",
+    "MA",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NV",
+    "NH",
+    "NJ",
+    "NM",
+    "NY",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VT",
+    "VA",
+    "WA",
+    "WV",
+    "WI",
+    "WY",
+    "DC",
+    "PR"
+  ];
+  var LEAFLET_CSS = [
+    "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",
+    "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"
+  ];
+  var LEAFLET_JS = [
+    "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+    "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
+  ];
+  var CLUSTER_CSS = [
+    "https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css"
+  ];
+  var CLUSTER_CSS2 = [
+    "https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css",
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.min.css"
+  ];
+  var CLUSTER_JS = [
+    "https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"
+  ];
   var leafletOk = false;
   function loadStylesheet(urls) {
     return new Promise((res) => {
@@ -322,13 +411,16 @@
     return [...new Set(list)];
   }
   async function fetchNpi(params) {
-    let lastErr = null;
+    let _lastErr = null;
     for (const url of npiCandidates(params)) {
       const local = url.includes("localhost") || url.startsWith(SAME_ORIGIN + "/api");
       try {
-        const res = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(local ? 5e3 : 18e3) });
+        const res = await fetch(url, {
+          headers: { Accept: "application/json" },
+          signal: AbortSignal.timeout(local ? 5e3 : 18e3)
+        });
         if (!res.ok) {
-          lastErr = new Error("Gateway returned " + res.status + ".");
+          _lastErr = new Error("Gateway returned " + res.status + ".");
           continue;
         }
         const text = await res.text();
@@ -336,21 +428,24 @@
         try {
           data = JSON.parse(text);
         } catch {
-          lastErr = new Error("Gateway returned an unexpected response.");
+          _lastErr = new Error("Gateway returned an unexpected response.");
           continue;
         }
-        if (data.Errors && data.Errors.length) throw new Error(data.Errors[0].description || "The registry rejected the query.");
+        if (data.Errors && data.Errors.length)
+          throw new Error(data.Errors[0].description || "The registry rejected the query.");
         if (!("results" in data) && !("result_count" in data)) {
-          lastErr = new Error("Unexpected registry response.");
+          _lastErr = new Error("Unexpected registry response.");
           continue;
         }
         return data.results || [];
       } catch (e) {
         if (e && e.message && /rejected the query/.test(e.message)) throw e;
-        lastErr = e;
+        _lastErr = e;
       }
     }
-    throw new Error('Could not reach the registry directly from your browser (the CMS registry does not allow direct browser calls). Start the CareFind backend — "uvicorn app.main:app --port 8000" — and open http://localhost:8000, which queries the registry server-side.');
+    throw new Error(
+      'Could not reach the registry directly from your browser (the CMS registry does not allow direct browser calls). Start the CareFind backend — "uvicorn app.main:app --port 8000" — and open http://localhost:8000, which queries the registry server-side.'
+    );
   }
   async function geocode(query) {
     const params = new URLSearchParams({ ...query, format: "json", limit: "1", countrycodes: "us" });
@@ -404,7 +499,12 @@
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
       }).addTo(mapInstance);
-      markerClusterLayer = L.markerClusterGroup ? L.markerClusterGroup({ maxClusterRadius: 50, showCoverageOnHover: false, spiderfyOnMaxZoom: true, chunkedLoading: true }).addTo(mapInstance) : null;
+      markerClusterLayer = L.markerClusterGroup ? L.markerClusterGroup({
+        maxClusterRadius: 50,
+        showCoverageOnHover: false,
+        spiderfyOnMaxZoom: true,
+        chunkedLoading: true
+      }).addTo(mapInstance) : null;
       setTimeout(() => {
         if (mapInstance) mapInstance.invalidateSize();
       }, 280);
@@ -430,12 +530,26 @@
     if (!mapInstance) return;
     clearMarkers();
     if (state.center) {
-      centerMarker = L.marker(state.center, { icon: L.divIcon({ className: "", html: '<div class="center-pin"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }), interactive: false, keyboard: false, zIndexOffset: -100 }).addTo(mapInstance);
+      centerMarker = L.marker(state.center, {
+        icon: L.divIcon({
+          className: "",
+          html: '<div class="center-pin"></div>',
+          iconSize: [18, 18],
+          iconAnchor: [9, 9]
+        }),
+        interactive: false,
+        keyboard: false,
+        zIndexOffset: -100
+      }).addTo(mapInstance);
     }
     const docs = state.providers.filter((d) => d.lat && d.lng);
     const bounds = L.latLngBounds(state.center ? [state.center] : []);
     docs.forEach((doc) => {
-      const m = L.marker([doc.lat, doc.lng], { icon: createMarkerIcon(doc.color, false), title: doc.name, alt: `${doc.name} — ${doc.specialty}` });
+      const m = L.marker([doc.lat, doc.lng], {
+        icon: createMarkerIcon(doc.color, false),
+        title: doc.name,
+        alt: `${doc.name} — ${doc.specialty}`
+      });
       m.bindPopup(buildPopup(doc), { maxWidth: 280, className: "carefind-popup" });
       m.on("click", () => selectDoctor(doc.npi, false));
       m.on("popupopen", () => {
@@ -456,7 +570,11 @@
       mapMarkers[doc.npi].setLatLng([doc.lat, doc.lng]).setPopupContent(buildPopup(doc));
       return;
     }
-    const m = L.marker([doc.lat, doc.lng], { icon: createMarkerIcon(doc.color, false), title: doc.name, alt: `${doc.name} — ${doc.specialty}` });
+    const m = L.marker([doc.lat, doc.lng], {
+      icon: createMarkerIcon(doc.color, false),
+      title: doc.name,
+      alt: `${doc.name} — ${doc.specialty}`
+    });
     m.bindPopup(buildPopup(doc), { maxWidth: 280, className: "carefind-popup" });
     m.on("click", () => selectDoctor(doc.npi, false));
     m.on("popupopen", () => {
@@ -650,7 +768,10 @@
     }
     let res;
     try {
-      res = await fetch(`${API_BASE}/api/providers/search?${p.toString()}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(3e4) });
+      res = await fetch(`${API_BASE}/api/providers/search?${p.toString()}`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(3e4)
+      });
     } catch (_) {
       const e = new Error("The CareFind API is unreachable.");
       e.unreachable = true;
@@ -701,7 +822,10 @@
   async function loadPlans() {
     if (!HAS_BACKEND) return;
     try {
-      const res = await fetch(`${API_BASE}/api/insurance/plans`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8e3) });
+      const res = await fetch(`${API_BASE}/api/insurance/plans`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(8e3)
+      });
       const data = await res.json();
       state.plans = data.plans || [];
       state.categories = data.categories || [];
@@ -859,12 +983,13 @@
   function applySort() {
     const s = state.sort;
     if (s === "name") state.providers.sort((a, b) => a.name.localeCompare(b.name));
-    else if (s === "distance") state.providers.sort((a, b) => {
-      if (a.distance == null && b.distance == null) return 0;
-      if (a.distance == null) return 1;
-      if (b.distance == null) return -1;
-      return a.distance - b.distance;
-    });
+    else if (s === "distance")
+      state.providers.sort((a, b) => {
+        if (a.distance == null && b.distance == null) return 0;
+        if (a.distance == null) return 1;
+        if (b.distance == null) return -1;
+        return a.distance - b.distance;
+      });
   }
   function renderCards() {
     const list = document.getElementById("results-list");
@@ -983,7 +1108,8 @@
     const foot = card.querySelector(".card-foot");
     if (foot && doc.distance != null) {
       const right = foot.lastElementChild;
-      if (right && !right.classList.contains("dist-badge")) right.outerHTML = `<span class="dist-badge">${doc.distance.toFixed(1)} mi</span>`;
+      if (right && !right.classList.contains("dist-badge"))
+        right.outerHTML = `<span class="dist-badge">${doc.distance.toFixed(1)} mi</span>`;
     }
   }
   function buildWelcome() {
@@ -996,7 +1122,9 @@
       { zip: "60601", spec: "Family Medicine", label: "Primary care · Chicago" },
       { zip: "33139", spec: "Pediatrics", label: "Pediatrics · Miami" }
     ];
-    const chips = examples.map((e) => `<button class="quick-chip" type="button" data-action="quick-search" data-zip="${e.zip}" data-spec="${esc2(e.spec)}">${pin}${esc2(e.label)}</button>`).join("");
+    const chips = examples.map(
+      (e) => `<button class="quick-chip" type="button" data-action="quick-search" data-zip="${e.zip}" data-spec="${esc2(e.spec)}">${pin}${esc2(e.label)}</button>`
+    ).join("");
     d.innerHTML = `<svg class="state-art" width="58" height="58" viewBox="0 0 58 58" fill="none"><path d="M29 5C19.6 5 12 12.2 12 21.4 12 33.9 29 53 29 53s17-19.1 17-31.6C46 12.2 38.4 5 29 5Z" fill="#dcefe8" stroke="#0f7a5f" stroke-width="2"/><path d="M29 14v15M21.5 21.5h15" stroke="#0f7a5f" stroke-width="2.6" stroke-linecap="round"/></svg>
     <p class="state-title">Search the national registry</p>
     <p class="state-text">Enter a ZIP code, a city and state, or an NPI to find licensed providers from the official CMS NPPES database — 8 million+ real records, no login.</p>
@@ -1113,7 +1241,11 @@
     trapTab(e, document.getElementById("detail-drawer"));
   }
   function focusables(container) {
-    return [...container.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea,[tabindex]:not([tabindex="-1"])')].filter((el) => el.offsetParent !== null);
+    return [
+      ...container.querySelectorAll(
+        'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea,[tabindex]:not([tabindex="-1"])'
+      )
+    ].filter((el) => el.offsetParent !== null);
   }
   function trapTab(e, container) {
     if (e.key !== "Tab" || !container) return;
@@ -1133,7 +1265,9 @@
     const dir = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(doc.fullAddress || doc.name)}`;
     const record = `https://npiregistry.cms.hhs.gov/provider-view/${encodeURIComponent(doc.npi)}`;
     const insSearch = `https://www.google.com/search?q=${encodeURIComponent(`${doc.name} ${doc.city} ${doc.stateAb} accepted insurance`)}`;
-    const taxes = doc.taxonomies.map((t) => `<div class="tax-item"><div class="tax-desc">${esc2(t.desc)}${t.primary ? '<span class="primary-tag">Primary</span>' : ""}</div><div class="tax-meta">${[t.code ? "Taxonomy " + esc2(t.code) : "", t.license ? "License " + esc2(t.license) + (t.state ? " (" + esc2(t.state) + ")" : "") : ""].filter(Boolean).join(" · ") || "No license on file"}</div></div>`).join("");
+    const taxes = doc.taxonomies.map(
+      (t) => `<div class="tax-item"><div class="tax-desc">${esc2(t.desc)}${t.primary ? '<span class="primary-tag">Primary</span>' : ""}</div><div class="tax-meta">${[t.code ? "Taxonomy " + esc2(t.code) : "", t.license ? "License " + esc2(t.license) + (t.state ? " (" + esc2(t.state) + ")" : "") : ""].filter(Boolean).join(" · ") || "No license on file"}</div></div>`
+    ).join("");
     const row = (k, v) => v ? `<div class="detail-row"><dt>${esc2(k)}</dt><dd>${esc2(v)}</dd></div>` : "";
     return `
     <div class="action-row">
@@ -1180,7 +1314,7 @@
 
     ${CLAIM_ENABLED ? `<p class="claim-line">Are you this provider? <button data-action="open-claim" data-npi="${esc2(doc.npi)}">Claim this listing</button></p>` : ""}`;
   }
-  function selectDoctor(npi, fromCard) {
+  function selectDoctor(npi, _fromCard) {
     state.activeNpi = npi;
     highlightCard(npi);
     updateMarkerStyles(npi);
@@ -1309,7 +1443,8 @@
     set("radius-select", p.get("r"));
     set("limit-select", p.get("limit"));
     const plans = p.get("plans");
-    if (plans) state.selectedPlans = plans.split(",").map((s) => s.trim()).filter(Boolean);
+    if (plans)
+      state.selectedPlans = plans.split(",").map((s) => s.trim()).filter(Boolean);
     if (p.get("ins") === "any") state.insMode = "any";
     if (state.plans.length) renderInsuranceFilter();
     if (p.get("name") || p.get("city") || p.get("st") || p.get("npi") || p.get("type")) openAdv(true);
@@ -1348,7 +1483,8 @@
       showSkeletons(parseInt(document.getElementById("limit-select").value, 10) > 25 ? 8 : 5);
     } else {
       const sp = document.getElementById("search-icon");
-      if (sp) sp.outerHTML = '<svg id="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>';
+      if (sp)
+        sp.outerHTML = '<svg id="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>';
       txt.textContent = "Search providers";
     }
   }
@@ -1389,9 +1525,13 @@
     el.style.animation = "none";
     void el.offsetHeight;
     el.style.animation = "shake .35s ease";
-    el.addEventListener("animationend", () => {
-      el.style.animation = "";
-    }, { once: true });
+    el.addEventListener(
+      "animationend",
+      () => {
+        el.style.animation = "";
+      },
+      { once: true }
+    );
   }
   function openAdv(open) {
     const f = document.getElementById("adv-fields"), t = document.getElementById("adv-toggle");
@@ -1404,16 +1544,20 @@
       return;
     }
     showToast("Finding your location…");
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const zip = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
-      if (zip) {
-        document.getElementById("zip-input").value = zip.substring(0, 5);
-        showToast("Location set — searching");
-        handleSearch();
-      } else {
-        showToast("Couldn't determine your ZIP. Enter it manually.");
-      }
-    }, () => showToast("Location permission denied."), { timeout: 1e4 });
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const zip = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+        if (zip) {
+          document.getElementById("zip-input").value = zip.substring(0, 5);
+          showToast("Location set — searching");
+          handleSearch();
+        } else {
+          showToast("Couldn't determine your ZIP. Enter it manually.");
+        }
+      },
+      () => showToast("Location permission denied."),
+      { timeout: 1e4 }
+    );
   }
   function formatDate(s) {
     if (!s) return "";

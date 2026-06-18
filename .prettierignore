@@ -1,0 +1,10 @@
+carefind.bundle.js
+docs/openapi.json
+package-lock.json
+node_modules
+coverage
+test-results
+playwright-report
+*.db
+
+.venv

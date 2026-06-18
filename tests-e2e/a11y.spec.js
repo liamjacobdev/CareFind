@@ -9,25 +9,68 @@ import { join } from 'node:path';
 const PAGE = pathToFileURL(join(process.cwd(), 'carefind.html')).href;
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
-const MEDICARE = { id: 'medicare', label: 'Medicare (Original)', category: 'medicare',
-                   payer: 'medicare', confidence: 'verified', kind: 'government', level: 'plan', filterable: true };
-const AETNA = { id: 'aetna', label: 'Aetna', category: 'commercial', payer: 'aetna',
-                confidence: 'estimated', kind: 'commercial', level: 'payer', filterable: false };
-const PLANS = { plans: [MEDICARE, AETNA],
-                categories: [{ id: 'medicare', label: 'Medicare', plans: [MEDICARE] },
-                             { id: 'commercial', label: 'Commercial / Employer', plans: [AETNA] }] };
+const MEDICARE = {
+  id: 'medicare',
+  label: 'Medicare (Original)',
+  category: 'medicare',
+  payer: 'medicare',
+  confidence: 'verified',
+  kind: 'government',
+  level: 'plan',
+  filterable: true,
+};
+const AETNA = {
+  id: 'aetna',
+  label: 'Aetna',
+  category: 'commercial',
+  payer: 'aetna',
+  confidence: 'estimated',
+  kind: 'commercial',
+  level: 'payer',
+  filterable: false,
+};
+const PLANS = {
+  plans: [MEDICARE, AETNA],
+  categories: [
+    { id: 'medicare', label: 'Medicare', plans: [MEDICARE] },
+    { id: 'commercial', label: 'Commercial / Employer', plans: [AETNA] },
+  ],
+};
 const provider = (over = {}) => ({
-  npi: '1003000126', name: 'Jane Doe, MD', isOrg: false, specialty: 'Cardiology',
-  taxonomies: [], address1: '1 Main St', city: 'Crestview', stateAb: 'FL', postalCode: '32536',
-  fullAddress: '1 Main St, Crestview, FL, 32536', mailingAddress: '', phone: '8505551234',
-  fax: '', gender: 'Female', soleProprietor: '', credential: 'MD', status: 'Active',
-  enumerationDate: '2010-01-01', lastUpdated: '2020-01-01',
+  npi: '1003000126',
+  name: 'Jane Doe, MD',
+  isOrg: false,
+  specialty: 'Cardiology',
+  taxonomies: [],
+  address1: '1 Main St',
+  city: 'Crestview',
+  stateAb: 'FL',
+  postalCode: '32536',
+  fullAddress: '1 Main St, Crestview, FL, 32536',
+  mailingAddress: '',
+  phone: '8505551234',
+  fax: '',
+  gender: 'Female',
+  soleProprietor: '',
+  credential: 'MD',
+  status: 'Active',
+  enumerationDate: '2010-01-01',
+  lastUpdated: '2020-01-01',
   insurance: { medicare: { value: true, confidence: 'verified', source: 'medicare', level: 'plan' } },
-  lat: 30.77, lng: -86.58, ...over,
+  lat: 30.77,
+  lng: -86.58,
+  ...over,
 });
-const search = (providers) => ({ count: providers.length, total: providers.length,
-  truncated: false, pool_capped: false, applied_filters: [], context_plans: [],
-  plans: [MEDICARE, AETNA], providers });
+const search = (providers) => ({
+  count: providers.length,
+  total: providers.length,
+  truncated: false,
+  pool_capped: false,
+  applied_filters: [],
+  context_plans: [],
+  plans: [MEDICARE, AETNA],
+  providers,
+});
 
 async function mock(page, { providers = [provider()] } = {}) {
   await page.route('**/api/**', (r) => r.fulfill({ json: {} }));

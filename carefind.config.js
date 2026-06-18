@@ -4,5 +4,5 @@
 window.CAREFIND_CONFIG = {
   apiBase: 'http://localhost:8000',
   claimEmail: 'providers@carefind.example',
-  allowPublicProxies: false
+  allowPublicProxies: false,
 };

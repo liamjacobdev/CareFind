@@ -6,9 +6,19 @@ import { describe, it, expect } from 'vitest';
 import logic from '../carefind.logic.js';
 
 const {
-  esc, cssEsc, haversine, formatPhone, toTitleCase, hashStr,
-  buildNpiParams, buildProviders, adaptBackendProvider, PALETTE, TAXONOMY_MAP,
-  coverageStatus, fmtDate,
+  esc,
+  cssEsc,
+  haversine,
+  formatPhone,
+  toTitleCase,
+  hashStr,
+  buildNpiParams,
+  buildProviders,
+  adaptBackendProvider,
+  PALETTE,
+  TAXONOMY_MAP,
+  coverageStatus,
+  fmtDate,
 } = logic;
 
 describe('fmtDate — provenance "checked <date>" (A3)', () => {
@@ -25,8 +35,10 @@ describe('fmtDate — provenance "checked <date>" (A3)', () => {
 
 describe('coverageStatus — payer vs plan level (A2)', () => {
   it('labels a plan-level verified hit "Confirmed"', () => {
-    expect(coverageStatus({ value: true, confidence: 'verified', level: 'plan' }))
-      .toEqual({ cls: 'yes', text: 'Confirmed' });
+    expect(coverageStatus({ value: true, confidence: 'verified', level: 'plan' })).toEqual({
+      cls: 'yes',
+      text: 'Confirmed',
+    });
   });
   it('NEVER labels a payer-level hit "Confirmed" — it is a network listing', () => {
     const s = coverageStatus({ value: true, confidence: 'verified', level: 'payer' });
@@ -41,8 +53,10 @@ describe('coverageStatus — payer vs plan level (A2)', () => {
     expect(coverageStatus({ value: false, confidence: 'verified', level: 'payer' }).text).toBe('Not listed');
   });
   it('verified unknown (null) is never a yes', () => {
-    expect(coverageStatus({ value: null, confidence: 'verified', level: 'payer' }))
-      .toEqual({ cls: 'unknown', text: 'Unverified' });
+    expect(coverageStatus({ value: null, confidence: 'verified', level: 'payer' })).toEqual({
+      cls: 'unknown',
+      text: 'Unverified',
+    });
   });
   it('an estimate is always "Likely", never Confirmed/In-network', () => {
     const s = coverageStatus({ value: true, confidence: 'estimated', level: 'payer' });
@@ -63,8 +77,7 @@ describe('coverageStatus — payer vs plan level (A2)', () => {
 
 describe('esc — HTML escaping (XSS)', () => {
   it('neutralizes an <img onerror> payload', () => {
-    expect(esc('<img src=x onerror="alert(1)">'))
-      .toBe('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
+    expect(esc('<img src=x onerror="alert(1)">')).toBe('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
   });
   it('escapes the five dangerous chars', () => {
     expect(esc(`&<>"'`)).toBe('&amp;&lt;&gt;&quot;&#39;');
@@ -176,11 +189,25 @@ describe('buildProviders — mirrors the backend normalize() shape', () => {
   const record = {
     number: 1003000126,
     enumeration_type: 'NPI-1',
-    basic: { first_name: 'jane', last_name: 'doe', credential: 'M.D.', status: 'A',
-             gender: 'F', enumeration_date: '2010-01-01', last_updated: '2020-01-01' },
+    basic: {
+      first_name: 'jane',
+      last_name: 'doe',
+      credential: 'M.D.',
+      status: 'A',
+      gender: 'F',
+      enumeration_date: '2010-01-01',
+      last_updated: '2020-01-01',
+    },
     addresses: [
-      { address_purpose: 'LOCATION', address_1: '1 main st', city: 'crestview',
-        state: 'FL', postal_code: '325361234', telephone_number: '850-555-1234', fax_number: '8505556789' },
+      {
+        address_purpose: 'LOCATION',
+        address_1: '1 main st',
+        city: 'crestview',
+        state: 'FL',
+        postal_code: '325361234',
+        telephone_number: '850-555-1234',
+        fax_number: '8505556789',
+      },
       { address_purpose: 'MAILING', address_1: 'po box 9', city: 'crestview', state: 'FL', postal_code: '32536' },
     ],
     taxonomies: [{ desc: 'Cardiovascular Disease', code: '207RC0000X', primary: true, state: 'FL', license: '123' }],
@@ -196,7 +223,7 @@ describe('buildProviders — mirrors the backend normalize() shape', () => {
     expect(p.address1).toBe('1 Main St');
     expect(p.city).toBe('Crestview');
     expect(p.stateAb).toBe('FL');
-    expect(p.postalCode).toBe('32536');         // truncated to 5
+    expect(p.postalCode).toBe('32536'); // truncated to 5
     expect(p.phone).toBe('(850) 555-1234');
     expect(p.fax).toBe('(850) 555-6789');
     expect(p.gender).toBe('Female');
@@ -208,8 +235,15 @@ describe('buildProviders — mirrors the backend normalize() shape', () => {
   });
 
   it('handles an organization record and missing fields', () => {
-    const [p] = buildProviders([{ number: 1, enumeration_type: 'NPI-2',
-      basic: { organization_name: 'gulf coast health llc' }, addresses: [], taxonomies: [] }]);
+    const [p] = buildProviders([
+      {
+        number: 1,
+        enumeration_type: 'NPI-2',
+        basic: { organization_name: 'gulf coast health llc' },
+        addresses: [],
+        taxonomies: [],
+      },
+    ]);
     expect(p.isOrg).toBe(true);
     expect(p.name).toBe('Gulf Coast Health LLC');
     expect(p.specialty).toBe('Healthcare Provider');
@@ -218,36 +252,49 @@ describe('buildProviders — mirrors the backend normalize() shape', () => {
   });
 
   it('covers the field-fallback branches (male, inactive, no name, non-primary taxonomy)', () => {
-    const [p] = buildProviders([{
-      number: 2, enumeration_type: 'NPI-1',
-      basic: { gender: 'M', status: 'I' },                       // male; inactive status
-      addresses: [{ address_purpose: 'LOCATION', city: 'Tampa', state: 'FL' }],  // no mailing
-      taxonomies: [{ desc: 'Family Medicine', primary: false }], // no primary -> taxes[0]
-    }]);
+    const [p] = buildProviders([
+      {
+        number: 2,
+        enumeration_type: 'NPI-1',
+        basic: { gender: 'M', status: 'I' }, // male; inactive status
+        addresses: [{ address_purpose: 'LOCATION', city: 'Tampa', state: 'FL' }], // no mailing
+        taxonomies: [{ desc: 'Family Medicine', primary: false }], // no primary -> taxes[0]
+      },
+    ]);
     expect(p.gender).toBe('Male');
-    expect(p.status).toBe('I');               // non-'A' falls through to the raw value
-    expect(p.name).toBe('Unnamed Provider');  // no first/last
-    expect(p.initials).toBe('DR');            // initials fallback
+    expect(p.status).toBe('I'); // non-'A' falls through to the raw value
+    expect(p.name).toBe('Unnamed Provider'); // no first/last
+    expect(p.initials).toBe('DR'); // initials fallback
     expect(p.specialty).toBe('Family Medicine');
-    expect(p.mailingAddress).toBe('');        // no MAILING address
+    expect(p.mailingAddress).toBe(''); // no MAILING address
   });
 
   it('falls back to basic.name then a generic label for an org', () => {
-    const [byName] = buildProviders([{ number: 3, enumeration_type: 'NPI-2',
-      basic: { name: 'acme health' }, addresses: [], taxonomies: [] }]);
+    const [byName] = buildProviders([
+      { number: 3, enumeration_type: 'NPI-2', basic: { name: 'acme health' }, addresses: [], taxonomies: [] },
+    ]);
     expect(byName.name).toBe('Acme Health');
-    const [generic] = buildProviders([{ number: 4, enumeration_type: 'NPI-2',
-      basic: {}, addresses: [], taxonomies: [] }]);
+    const [generic] = buildProviders([
+      { number: 4, enumeration_type: 'NPI-2', basic: {}, addresses: [], taxonomies: [] },
+    ]);
     expect(generic.name).toBe('Healthcare Organization');
   });
 });
 
 describe('adaptBackendProvider', () => {
   const backendShape = {
-    npi: '1003000126', name: 'Jane Doe', isOrg: false, specialty: 'Cardiology',
-    address1: '1 Main St', city: 'Crestview', stateAb: 'FL', postalCode: '32536',
-    phone: '8505551234', insurance: { medicare: { value: true, confidence: 'verified' } },
-    lat: 30.77, lng: -86.58,
+    npi: '1003000126',
+    name: 'Jane Doe',
+    isOrg: false,
+    specialty: 'Cardiology',
+    address1: '1 Main St',
+    city: 'Crestview',
+    stateAb: 'FL',
+    postalCode: '32536',
+    phone: '8505551234',
+    insurance: { medicare: { value: true, confidence: 'verified' } },
+    lat: 30.77,
+    lng: -86.58,
   };
 
   it('computes distance from a supplied center', () => {

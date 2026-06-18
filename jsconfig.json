@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "checkJs": true,
+    "noEmit": true,
+    "module": "esnext",
+    "target": "es2022",
+    "moduleResolution": "bundler",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.js", "carefind.logic.js", "carefind.config.js", "build.mjs", "types/**/*.d.ts"]
+}

@@ -7,27 +7,53 @@ import { join } from 'node:path';
 
 const PAGE = pathToFileURL(join(process.cwd(), 'carefind.html')).href;
 
-const MEDICARE_PLAN = { id: 'medicare', label: 'Medicare (Original)', category: 'medicare',
-                        payer: 'medicare', confidence: 'verified', kind: 'government' };
-const PLANS = { plans: [MEDICARE_PLAN],
-                categories: [{ id: 'medicare', label: 'Medicare', plans: [MEDICARE_PLAN] }] };
+const MEDICARE_PLAN = {
+  id: 'medicare',
+  label: 'Medicare (Original)',
+  category: 'medicare',
+  payer: 'medicare',
+  confidence: 'verified',
+  kind: 'government',
+};
+const PLANS = { plans: [MEDICARE_PLAN], categories: [{ id: 'medicare', label: 'Medicare', plans: [MEDICARE_PLAN] }] };
 const SEARCH = {
-  count: 1, total: 1, truncated: false, pool_capped: false, plans: [MEDICARE_PLAN],
-  providers: [{
-    npi: '1003000126', name: 'Jane Doe, MD', isOrg: false, specialty: 'Cardiology',
-    taxonomies: [], address1: '1 Main St', city: 'Crestview', stateAb: 'FL', postalCode: '32536',
-    fullAddress: '1 Main St, Crestview, FL, 32536', mailingAddress: '',
-    phone: '8505551234', fax: '', gender: 'Female', soleProprietor: '', credential: 'MD',
-    status: 'Active', enumerationDate: '2010-01-01', lastUpdated: '2020-01-01',
-    insurance: { medicare: { value: true, confidence: 'verified', source: 'medicare' } },
-    lat: 30.77, lng: -86.58,
-  }],
+  count: 1,
+  total: 1,
+  truncated: false,
+  pool_capped: false,
+  plans: [MEDICARE_PLAN],
+  providers: [
+    {
+      npi: '1003000126',
+      name: 'Jane Doe, MD',
+      isOrg: false,
+      specialty: 'Cardiology',
+      taxonomies: [],
+      address1: '1 Main St',
+      city: 'Crestview',
+      stateAb: 'FL',
+      postalCode: '32536',
+      fullAddress: '1 Main St, Crestview, FL, 32536',
+      mailingAddress: '',
+      phone: '8505551234',
+      fax: '',
+      gender: 'Female',
+      soleProprietor: '',
+      credential: 'MD',
+      status: 'Active',
+      enumerationDate: '2010-01-01',
+      lastUpdated: '2020-01-01',
+      insurance: { medicare: { value: true, confidence: 'verified', source: 'medicare' } },
+      lat: 30.77,
+      lng: -86.58,
+    },
+  ],
 };
 
 test('search → drawer → save → Saved tab → export CSV', async ({ page }) => {
   // Catch-all first so the specific routes (registered after) take precedence.
   await page.route('**/api/**', (r) => r.fulfill({ json: {} }));
-  await page.route('**/healthz', (r) => r.fulfill({ json: { ok: true } }));  // backend "reachable"
+  await page.route('**/healthz', (r) => r.fulfill({ json: { ok: true } })); // backend "reachable"
   await page.route('**/api/insurance/plans', (r) => r.fulfill({ json: PLANS }));
   await page.route('**/api/providers/search**', (r) => r.fulfill({ json: SEARCH }));
 

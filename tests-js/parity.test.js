@@ -10,16 +10,13 @@ import logic from '../carefind.logic.js';
 
 // Vitest runs from the repo root; the jsdom env makes import.meta.url an http URL,
 // so resolve the shared fixture from cwd instead.
-const golden = JSON.parse(
-  readFileSync(join(process.cwd(), 'tests', 'fixtures', 'normalize_golden.json'), 'utf-8')
-);
+const golden = JSON.parse(readFileSync(join(process.cwd(), 'tests', 'fixtures', 'normalize_golden.json'), 'utf-8'));
 
 describe('buildProviders <-> backend normalize() parity (golden fixture)', () => {
   it('produces the shared structural fields field-for-field', () => {
     const [out] = logic.buildProviders([golden.record]);
     for (const [key, val] of Object.entries(golden.expected)) {
-      expect(out[key], `buildProviders() field "${key}" drifted from the golden fixture`)
-        .toStrictEqual(val);
+      expect(out[key], `buildProviders() field "${key}" drifted from the golden fixture`).toStrictEqual(val);
     }
   });
 });

@@ -49,6 +49,12 @@ jobs:
       - name: Verify committed bundle matches src/ (reproducible build)
         run: git diff --exit-code carefind.bundle.js
 
+      - name: Lint (eslint)
+        run: npm run lint
+
+      - name: Format check (prettier)
+        run: npm run format:check
+
       - name: Audit shipped npm deps
         # The app ships no runtime npm dependencies (the bundle is built, Leaflet loads
         # from a CDN), so the shipped surface must be clean. Dev-only tooling vulns are

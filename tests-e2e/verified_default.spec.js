@@ -7,14 +7,29 @@ import { join } from 'node:path';
 
 const PAGE = pathToFileURL(join(process.cwd(), 'carefind.html')).href;
 
-const MED = { id: 'medicare', label: 'Medicare (Original)', category: 'medicare',
-              payer: 'medicare', confidence: 'verified', kind: 'government' };
-const AETNA = { id: 'aetna', label: 'Aetna', category: 'commercial',
-                payer: 'aetna', confidence: 'estimated', kind: 'commercial' };
-const PLANS = { plans: [MED, AETNA], categories: [
-  { id: 'medicare', label: 'Medicare', plans: [MED] },
-  { id: 'commercial', label: 'Commercial', plans: [AETNA] },
-] };
+const MED = {
+  id: 'medicare',
+  label: 'Medicare (Original)',
+  category: 'medicare',
+  payer: 'medicare',
+  confidence: 'verified',
+  kind: 'government',
+};
+const AETNA = {
+  id: 'aetna',
+  label: 'Aetna',
+  category: 'commercial',
+  payer: 'aetna',
+  confidence: 'estimated',
+  kind: 'commercial',
+};
+const PLANS = {
+  plans: [MED, AETNA],
+  categories: [
+    { id: 'medicare', label: 'Medicare', plans: [MED] },
+    { id: 'commercial', label: 'Commercial', plans: [AETNA] },
+  ],
+};
 
 test('estimated payers are hidden until "Include estimated" is toggled', async ({ page }) => {
   await page.route('**/api/**', (r) => r.fulfill({ json: {} }));
