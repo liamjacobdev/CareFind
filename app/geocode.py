@@ -22,9 +22,14 @@ from typing import Any
 import httpx
 
 from . import db, metrics
+from .circuit import CircuitBreaker
 from .config import settings
 
 log = logging.getLogger("carefind.geocode")
+
+# Breaker over the geocoder chain (Census + Nominatim). If both are failing, fast-fail
+# to "no coords" instead of stalling each lookup; a not-found address is NOT a failure.
+_geo_breaker = CircuitBreaker("geocode")
 
 # [lat, lon]. A list (not a tuple) because it round-trips through JSON and the cache.
 Coords = list[float]
@@ -101,19 +106,29 @@ async def _nominatim_search(client: httpx.AsyncClient, q: str) -> Coords | None:
 
 async def _geocode_live(client: httpx.AsyncClient, q: str) -> Coords | None:
     """Resolve one address through the source chain: Census first, Nominatim on a
-    miss/error. Returns [lat, lon] or None — never a fabricated coordinate."""
+    miss/error. Returns [lat, lon] or None — never a fabricated coordinate.
+
+    Circuit-broken (D4): when the chain is down, fast-fail to None instead of stalling
+    each lookup. A successful response (even a not-found) closes the breaker; only an
+    error from the chain (both sources unavailable) counts as a failure."""
+    if not _geo_breaker.allow():
+        return None
     if census_enabled():
         try:
             coords = await _census_search(client, q)
             if coords:
+                _geo_breaker.record_success()
                 return coords
         except Exception as e:
             log.warning("Census geocode failed for %r, trying Nominatim: %s: %s",
                         q, type(e).__name__, e)  # fall through to Nominatim
     try:
-        return await _nominatim_search(client, q)
+        coords = await _nominatim_search(client, q)
+        _geo_breaker.record_success()  # chain responded (coords or a clean not-found)
+        return coords
     except Exception as e:
         metrics.incr("upstream_error")
+        _geo_breaker.record_failure()
         log.warning("Nominatim geocode failed for %r: %s: %s", q, type(e).__name__, e)
         return None
 

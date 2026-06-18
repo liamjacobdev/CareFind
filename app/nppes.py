@@ -12,7 +12,12 @@ import httpx
 
 from . import metrics
 from .cache import build_cache
+from .circuit import CircuitBreaker
 from .config import settings
+
+# Trip after a few consecutive NPPES failures so an outage fast-fails instead of every
+# request eating the full timeout; auto-recovers after the cooldown.
+_breaker = CircuitBreaker("nppes")
 
 # Short-TTL cache of NPPES search results (C4), keyed on the effective query params. An
 # identical repeat search (common: pagination, a user re-running the same query, the
@@ -124,8 +129,13 @@ async def search(q: dict[str, Any]) -> list[Any]:
 
 
 async def _live_search(params: dict[str, Any]) -> list[Any]:
-    """One NPPES query (with a single retry); raises on a bad query or unreachable upstream."""
+    """One NPPES query (with a single retry); raises on a bad query or unreachable upstream.
+    Guarded by a circuit breaker (D4): while NPPES is failing, fast-fail instead of eating
+    a full timeout per request."""
     import asyncio
+
+    if not _breaker.allow():
+        raise RuntimeError("NPPES circuit open — upstream is failing; not attempting.")
 
     headers = {"Accept": "application/json", "User-Agent": settings.contact_ua}
     last_exc = None
@@ -144,10 +154,13 @@ async def _live_search(params: dict[str, Any]) -> list[Any]:
                     await asyncio.sleep(0.8)
         else:
             assert last_exc is not None
+            _breaker.record_failure()
             raise last_exc
 
+    _breaker.record_success()
     if isinstance(data, dict) and data.get("Errors"):
-        # NPPES reports bad queries in an Errors array — surface as a 400.
+        # NPPES reports bad queries in an Errors array — surface as a 400. (A bad query
+        # is a client error, not an upstream failure, so the breaker already saw success.)
         raise ValueError(data["Errors"][0].get("description", "The registry rejected the query."))
     out = data.get("results", []) if isinstance(data, dict) else []
     return out if isinstance(out, list) else []

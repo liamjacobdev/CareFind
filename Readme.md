@@ -171,6 +171,9 @@ Any container host works (Fly.io, Railway, Render, a VPS). Keep the SQLite volum
 
 All `/api/*` routes are **rate-limited per client** (`RATE_LIMIT_MAX`/`RATE_LIMIT_WINDOW`; behind a proxy set `CAREFIND_TRUST_PROXY=true` so the bucket is the real client IP — see the deploy note above) and **CORS** is locked to `ALLOWED_ORIGINS` (localhost-only if unset — never a blanket `*`).
 
+### Resilience (D4)
+Every upstream call (NPPES, the geocoders, each FHIR Plan-Net directory) is **bounded** (timeouts), **retried/cached**, and **circuit-broken** ([app/circuit.py](app/circuit.py)): after repeated failures the breaker opens and calls fast-fail to a safe degraded answer (search → controlled 502; insurance → "unknown", never a fabricated yes; map → no coords) instead of each request eating a timeout — and recovers automatically. A down payer never affects another (per-payer breakers). `GET /readyz` is a load-balancer readiness probe (datastore reachable + registry built). The shared-state seams (rate limiter, cache, datastore — [app/interfaces.py](app/interfaces.py)) make a global limit/cache/store across workers a config swap to Redis/Postgres. Load + chaos: [loadtest/](loadtest/).
+
 ### Security & privacy
 - **CSP with no `'unsafe-inline'` for scripts** — all JS is external (same-origin config + bundle) or the pinned Leaflet CDNs, so an injected inline `<script>` won't run. Sent as a real header at the edge (Caddyfile) and as the page's meta CSP.
 - **Full security headers** on every response: HSTS, `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` (geolocation only for "near me"), `Cross-Origin-Opener-Policy`.

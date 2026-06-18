@@ -51,6 +51,12 @@ def test_healthz(client):
     assert "data_freshness" in body
 
 
+def test_readyz_reports_ready(client):
+    """D4 readiness: datastore reachable + registry built."""
+    r = client.get("/readyz")
+    assert r.status_code == 200 and r.json()["ready"] is True
+
+
 def test_healthz_flips_to_503_when_a_source_is_stale(client):
     """C3 dead-man's-switch: a tracked source past its SLO flips /healthz unhealthy."""
     import time as _t

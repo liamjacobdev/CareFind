@@ -51,6 +51,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "email, or enable the keyless US Census geocoder (GEOCODE_USE_CENSUS=true)."
         )
     yield
+    # Graceful shutdown (D4): uvicorn stops accepting connections and drains in-flight
+    # requests on SIGTERM; per-request httpx clients close in their own `async with`,
+    # so there's nothing to leak here — just record the clean stop.
+    log.info("CareFind shutting down")
 
 
 app = FastAPI(title="CareFind API", version="3.1", lifespan=lifespan)
@@ -319,6 +323,21 @@ def healthz(response: Response) -> dict[str, Any]:
         response.status_code = 503
     return {"ok": fresh["slos_met"], "medicare_npis": db.medicare_count(),
             "insurance_plans": registry.plans(), "data_freshness": fresh}
+
+
+@app.get("/readyz")
+def readyz(response: Response) -> dict[str, Any]:
+    """Readiness (D4): is the datastore reachable and the registry built? A load
+    balancer routes traffic only while this is 200, so a worker that can't reach its
+    datastore is pulled instead of serving errors."""
+    try:
+        db.medicare_count()           # cheap datastore probe
+        ready = bool(registry.sources)
+    except Exception:
+        ready = False
+    if not ready:
+        response.status_code = 503
+    return {"ready": ready}
 
 
 def _trigger_ingest(source: str) -> None:
