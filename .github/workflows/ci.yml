@@ -55,6 +55,9 @@ jobs:
       - name: Format check (prettier)
         run: npm run format:check
 
+      - name: Type-check (tsc --checkJs)
+        run: npm run typecheck
+
       - name: Audit shipped npm deps
         # The app ships no runtime npm dependencies (the bundle is built, Leaflet loads
         # from a CDN), so the shipped surface must be clean. Dev-only tooling vulns are

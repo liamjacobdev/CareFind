@@ -34,6 +34,12 @@ const {
 const LS_KEY = 'carefind_saved_v4';
 const GEO_KEY = 'carefind_geocache_v1';
 
+// Loosely-typed element accessor: the app knows which concrete element each id is, so
+// this returns `any` to let `tsc --checkJs` allow .value/.dataset/etc. at DOM boundaries
+// without a cast per site. checkJs still verifies our own logic, flow, and call signatures.
+/** @param {string} id @returns {any} */
+const byId = (id) => document.getElementById(id);
+
 // TAXONOMY_MAP and PALETTE now live in carefind.logic.js (imported above),
 // shared verbatim with the Vitest unit tests.
 const CHECK_SVG =
@@ -304,7 +310,7 @@ async function reverseGeocode(lat, lon) {
    MAP
    ════════════════════════════════════════════ */
 function initMap() {
-  const el = document.getElementById('map');
+  const el = byId('map');
   if (!el) return;
   if (!el.style.height || el.offsetHeight === 0) {
     el.style.height = '100%';
@@ -437,9 +443,9 @@ function buildPopup(doc) {
   </div>`;
 }
 function showMapUnavailable() {
-  const c = document.getElementById('map-container');
+  const c = byId('map-container');
   if (!c) return;
-  let el = document.getElementById('map-unavailable');
+  let el = byId('map-unavailable');
   if (!el) {
     el = document.createElement('div');
     el.id = 'map-unavailable';
@@ -453,7 +459,7 @@ function showMapUnavailable() {
     <button class="state-retry" data-action="retry-map">Retry map</button>`;
 }
 function hideMapUnavailable() {
-  const el = document.getElementById('map-unavailable');
+  const el = byId('map-unavailable');
   if (el) el.remove();
 }
 async function retryMap() {
@@ -476,15 +482,15 @@ async function retryMap() {
    ════════════════════════════════════════════ */
 function readForm() {
   return {
-    zip: document.getElementById('zip-input').value.trim(),
-    radius: document.getElementById('radius-select').value,
-    specialty: document.getElementById('specialty-select').value,
-    name: document.getElementById('name-input').value.trim(),
-    city: document.getElementById('city-input').value.trim(),
-    st: document.getElementById('state-select').value,
-    npi: document.getElementById('npi-input').value.trim(),
-    type: document.getElementById('type-select').value,
-    limit: document.getElementById('limit-select').value,
+    zip: byId('zip-input').value.trim(),
+    radius: byId('radius-select').value,
+    specialty: byId('specialty-select').value,
+    name: byId('name-input').value.trim(),
+    city: byId('city-input').value.trim(),
+    st: byId('state-select').value,
+    npi: byId('npi-input').value.trim(),
+    type: byId('type-select').value,
+    limit: byId('limit-select').value,
   };
 }
 
@@ -493,17 +499,17 @@ async function handleSearch() {
   const f = readForm();
 
   if (f.npi && !/^\d{10}$/.test(f.npi)) {
-    shake(document.getElementById('npi-input'));
+    shake(byId('npi-input'));
     showToast('An NPI is exactly 10 digits.');
     return;
   }
   if (!f.npi && !f.zip && !(f.city && f.st)) {
-    shake(document.getElementById('zip-input'));
+    shake(byId('zip-input'));
     showToast('Enter a ZIP code, or a city and state, or an NPI.');
     return;
   }
   if (f.zip && !/^\d{5}$/.test(f.zip)) {
-    shake(document.getElementById('zip-input'));
+    shake(byId('zip-input'));
     showToast('Enter a valid 5-digit ZIP code.');
     return;
   }
@@ -556,7 +562,7 @@ async function handleSearch() {
         applySort();
         renderCards();
         if (mapInstance) plotMarkers(); // coords are already attached — pins now, no wait
-        document.getElementById('results-count-header').textContent =
+        byId('results-count-header').textContent =
           `${providers.length} provider${providers.length !== 1 ? 's' : ''} found`;
         finishSearch();
         return;
@@ -586,7 +592,7 @@ async function handleSearch() {
     applySort();
     renderCards();
     if (mapInstance) plotMarkers();
-    document.getElementById('results-count-header').textContent =
+    byId('results-count-header').textContent =
       `${state.providers.length} provider${state.providers.length !== 1 ? 's' : ''} found`;
     geocodeProviders(token);
   } catch (err) {
@@ -624,7 +630,7 @@ async function backendSearch(f) {
     });
   } catch (_) {
     // Connection refused / DNS / timeout — backend isn't reachable.
-    const e = new Error('The CareFind API is unreachable.');
+    const e = /** @type {Error & { unreachable?: boolean }} */ (new Error('The CareFind API is unreachable.'));
     e.unreachable = true;
     throw e;
   }
@@ -633,7 +639,7 @@ async function backendSearch(f) {
       const j = await res.json().catch(() => ({}));
       throw new Error(j.detail || 'The registry rejected the query.');
     }
-    const e = new Error('The CareFind API is unreachable.');
+    const e = /** @type {Error & { unreachable?: boolean }} */ (new Error('The CareFind API is unreachable.'));
     e.unreachable = true;
     throw e;
   }
@@ -706,8 +712,8 @@ async function loadPlans() {
   renderInsuranceFilter();
 }
 function renderInsuranceFilter() {
-  const field = document.getElementById('insurance-field');
-  const wrap = document.getElementById('insurance-filter');
+  const field = byId('insurance-field');
+  const wrap = byId('insurance-filter');
   if (!state.plans.length) {
     field.style.display = 'none';
     return;
@@ -878,7 +884,7 @@ async function geocodeProviders(token) {
         state.providers.forEach(addOrMoveMarker);
         applySort();
         renderCards();
-        document.getElementById('results-count-header').textContent =
+        byId('results-count-header').textContent =
           `${state.providers.length} provider${state.providers.length !== 1 ? 's' : ''} found`;
       }
     }
@@ -914,7 +920,7 @@ function applySort() {
    RENDER CARDS
    ════════════════════════════════════════════ */
 function renderCards() {
-  const list = document.getElementById('results-list');
+  const list = byId('results-list');
   list.innerHTML = '';
   let items;
   if (state.activeTab === 'favorites') {
@@ -1085,7 +1091,7 @@ function buildFavEmpty() {
   return d;
 }
 function showEmptyState(msg) {
-  const list = document.getElementById('results-list');
+  const list = byId('results-list');
   list.classList.remove('cards');
   const hasFilter = state.selectedPlans.length > 0;
   const tip = hasFilter
@@ -1097,31 +1103,31 @@ function showEmptyState(msg) {
   list.innerHTML = `<div class="state-block"><svg class="state-art" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#8a958f" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
     <p class="state-title">No providers found</p>
     <p class="state-text">${esc(msg)} ${tip}</p>${clearBtn}</div>`;
-  document.getElementById('results-count-header').textContent = '';
+  byId('results-count-header').textContent = '';
   updateResultsBar();
 }
 function showErrorState(msg) {
-  const list = document.getElementById('results-list');
+  const list = byId('results-list');
   list.classList.remove('cards');
   list.innerHTML = `<div class="state-block"><svg class="state-art" width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#b3402f" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>
     <p class="state-title">Couldn't reach the registry</p>
     <p class="state-text err">${esc(msg)}</p>
     <button class="state-retry" data-action="search">Try again</button></div>`;
-  document.getElementById('results-count-header').textContent = '';
+  byId('results-count-header').textContent = '';
   updateResultsBar();
 }
 // Honest state when the backend isn't running and there's no working standalone path
 // (the CMS registry can't be called directly from a browser). Tell the user exactly
 // what to do instead of advertising a search that can't run.
 function showBackendRequired() {
-  const list = document.getElementById('results-list');
+  const list = byId('results-list');
   list.classList.remove('cards');
   list.innerHTML = `<div class="state-block"><svg class="state-art" width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#b3402f" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 20h10M9 16v4M15 16v4"/></svg>
     <p class="state-title">Start the CareFind backend</p>
     <p class="state-text">Provider search runs through the CareFind backend — the public CMS registry can't be queried directly from a browser. Start it and reload:</p>
     <p class="state-text" style="font-family:ui-monospace,Menlo,monospace;background:var(--card,#f4f6f5);padding:8px 12px;border-radius:8px;">uvicorn app.main:app --port 8000</p>
     <p class="state-text">then open <b>http://localhost:8000</b>. <button class="state-retry" data-action="search" style="margin-top:8px;">Try again</button></p></div>`;
-  document.getElementById('results-count-header').textContent = '';
+  byId('results-count-header').textContent = '';
   updateResultsBar();
 }
 /* Honest signal for the estimated tier: when "Include estimated" is on and the
@@ -1147,10 +1153,10 @@ function estimatedFilterHint() {
     : ` <span class="results-hint">· estimated matches show plans likely available in this area, not confirmed for each provider</span>`;
 }
 function updateResultsBar() {
-  const bar = document.getElementById('results-bar');
-  const txt = document.getElementById('results-bar-text');
-  const sortWrap = document.getElementById('sort-wrap');
-  const exportWrap = document.getElementById('export-wrap');
+  const bar = byId('results-bar');
+  const txt = byId('results-bar-text');
+  const sortWrap = byId('sort-wrap');
+  const exportWrap = byId('export-wrap');
   if (state.activeTab === 'results' && state.providers.length) {
     bar.style.display = 'flex';
     sortWrap.style.display = 'inline-flex';
@@ -1186,20 +1192,20 @@ function openDetail(npi) {
   if (!doc) return;
   selectDoctor(npi, true);
   lastFocus = document.activeElement;
-  document.getElementById('drawer-avatar').textContent = doc.initials || '?';
-  document.getElementById('drawer-avatar').style.background = doc.color;
-  document.getElementById('drawer-name').textContent = doc.name;
-  document.getElementById('drawer-spec').textContent = doc.specialty;
-  document.getElementById('drawer-body').innerHTML = buildDetail(doc);
-  document.getElementById('scrim').classList.add('open');
-  const dr = document.getElementById('detail-drawer');
+  byId('drawer-avatar').textContent = doc.initials || '?';
+  byId('drawer-avatar').style.background = doc.color;
+  byId('drawer-name').textContent = doc.name;
+  byId('drawer-spec').textContent = doc.specialty;
+  byId('drawer-body').innerHTML = buildDetail(doc);
+  byId('scrim').classList.add('open');
+  const dr = byId('detail-drawer');
   dr.classList.add('open');
   dr.focus();
   document.addEventListener('keydown', onDrawerKey);
 }
 function closeDetail() {
-  document.getElementById('scrim').classList.remove('open');
-  document.getElementById('detail-drawer').classList.remove('open');
+  byId('scrim').classList.remove('open');
+  byId('detail-drawer').classList.remove('open');
   document.removeEventListener('keydown', onDrawerKey);
   if (lastFocus && lastFocus.focus) lastFocus.focus();
 }
@@ -1208,7 +1214,7 @@ function onDrawerKey(e) {
     closeDetail();
     return;
   }
-  trapTab(e, document.getElementById('detail-drawer'));
+  trapTab(e, byId('detail-drawer'));
 }
 
 /* Keep keyboard focus inside an open dialog (drawer/modal) — accessibility. */
@@ -1306,7 +1312,9 @@ function selectDoctor(npi, _fromCard) {
   }
 }
 function highlightCard(npi) {
-  document.querySelectorAll('.provider-card').forEach((c) => c.classList.toggle('active', c.dataset.npi === npi));
+  document
+    .querySelectorAll('.provider-card')
+    .forEach((/** @type {any} */ c) => c.classList.toggle('active', c.dataset.npi === npi));
   const a = document.querySelector(`.provider-card[data-npi="${cssEsc(npi)}"]`);
   if (a) a.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -1339,11 +1347,11 @@ function toggleFavorite(npi) {
   saveFavorites();
   updateFavBadge();
   renderCards();
-  if (document.getElementById('detail-drawer').classList.contains('open')) openDetail(npi);
+  if (byId('detail-drawer').classList.contains('open')) openDetail(npi);
 }
 function updateFavBadge() {
   const c = Object.keys(state.favorites).length;
-  const b = document.getElementById('fav-count-badge');
+  const b = byId('fav-count-badge');
   b.textContent = c;
   b.style.display = c > 0 ? 'inline-flex' : 'none';
 }
@@ -1378,18 +1386,18 @@ function exportFavorites(kind) {
    ════════════════════════════════════════════ */
 function switchTab(tab) {
   state.activeTab = tab;
-  document.getElementById('tab-results').classList.toggle('active', tab === 'results');
-  document.getElementById('tab-favorites').classList.toggle('active', tab === 'favorites');
+  byId('tab-results').classList.toggle('active', tab === 'results');
+  byId('tab-favorites').classList.toggle('active', tab === 'favorites');
   renderCards();
 }
 function switchTabSilent(tab) {
   state.activeTab = tab;
-  document.getElementById('tab-results').classList.toggle('active', tab === 'results');
-  document.getElementById('tab-favorites').classList.toggle('active', tab === 'favorites');
+  byId('tab-results').classList.toggle('active', tab === 'results');
+  byId('tab-favorites').classList.toggle('active', tab === 'favorites');
 }
 function setView(which) {
   document.body.classList.toggle('show-map', which === 'map');
-  document.querySelectorAll('.view-toggle button').forEach((b) => {
+  document.querySelectorAll('.view-toggle button').forEach((/** @type {any} */ b) => {
     const on = b.dataset.action === `view-${which}`;
     b.classList.toggle('active', on);
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -1422,7 +1430,7 @@ function readUrl() {
   if (![...p.keys()].length) return false;
   const set = (id, v) => {
     if (v != null) {
-      const el = document.getElementById(id);
+      const el = byId(id);
       if (el) el.value = v;
     }
   };
@@ -1455,15 +1463,15 @@ function readUrl() {
 let claimLastFocus = null;
 function openClaim(npi) {
   const subject = encodeURIComponent(npi ? `Claim CareFind listing — NPI ${npi}` : 'Claim a CareFind listing');
-  document.getElementById('claim-link').href = `mailto:${CLAIM_EMAIL}?subject=${subject}`;
-  const m = document.getElementById('claim-modal');
+  byId('claim-link').href = `mailto:${CLAIM_EMAIL}?subject=${subject}`;
+  const m = byId('claim-modal');
   m.classList.add('open');
   claimLastFocus = document.activeElement;
-  document.getElementById('claim-link').focus();
+  byId('claim-link').focus();
   document.addEventListener('keydown', onClaimKey);
 }
 function closeClaim() {
-  document.getElementById('claim-modal').classList.remove('open');
+  byId('claim-modal').classList.remove('open');
   document.removeEventListener('keydown', onClaimKey);
   if (claimLastFocus && claimLastFocus.focus) claimLastFocus.focus();
 }
@@ -1479,16 +1487,16 @@ function onClaimKey(e) {
    UI HELPERS
    ════════════════════════════════════════════ */
 function setSearchLoading(loading) {
-  const btn = document.getElementById('search-btn');
-  const txt = document.getElementById('search-btn-text');
-  const icon = document.getElementById('search-icon');
+  const btn = byId('search-btn');
+  const txt = byId('search-btn-text');
+  const icon = byId('search-icon');
   btn.disabled = loading;
   if (loading) {
     if (icon) icon.outerHTML = '<div class="spinner" id="search-icon"></div>';
     txt.textContent = 'Searching…';
-    showSkeletons(parseInt(document.getElementById('limit-select').value, 10) > 25 ? 8 : 5);
+    showSkeletons(parseInt(byId('limit-select').value, 10) > 25 ? 8 : 5);
   } else {
-    const sp = document.getElementById('search-icon');
+    const sp = byId('search-icon');
     if (sp)
       sp.outerHTML =
         '<svg id="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>';
@@ -1496,10 +1504,10 @@ function setSearchLoading(loading) {
   }
 }
 function showSkeletons(n) {
-  const list = document.getElementById('results-list');
+  const list = byId('results-list');
   list.innerHTML = '';
   list.classList.add('cards');
-  document.getElementById('results-bar').style.display = 'none';
+  byId('results-bar').style.display = 'none';
   for (let i = 0; i < n; i++) {
     const el = document.createElement('div');
     el.className = 'provider-card';
@@ -1509,7 +1517,7 @@ function showSkeletons(n) {
   }
 }
 function showPill(msg, dur = 3000) {
-  const p = document.getElementById('map-info-pill');
+  const p = byId('map-info-pill');
   p.textContent = msg;
   p.classList.add('visible');
   clearTimeout(p._t);
@@ -1517,7 +1525,7 @@ function showPill(msg, dur = 3000) {
 }
 let toastTimer = null;
 function showToast(msg) {
-  const t = document.getElementById('toast');
+  const t = byId('toast');
   t.textContent = msg;
   t.style.opacity = '1';
   t.style.transform = 'translateX(-50%) translateY(0)';
@@ -1542,8 +1550,8 @@ function shake(el) {
   );
 }
 function openAdv(open) {
-  const f = document.getElementById('adv-fields'),
-    t = document.getElementById('adv-toggle');
+  const f = byId('adv-fields'),
+    t = byId('adv-toggle');
   f.classList.toggle('open', open);
   t.setAttribute('aria-expanded', String(open));
 }
@@ -1559,7 +1567,7 @@ async function useLocation() {
     async (pos) => {
       const zip = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
       if (zip) {
-        document.getElementById('zip-input').value = zip.substring(0, 5);
+        byId('zip-input').value = zip.substring(0, 5);
         showToast('Location set — searching');
         handleSearch();
       } else {
@@ -1579,7 +1587,7 @@ async function useLocation() {
 function formatDate(s) {
   if (!s) return '';
   const d = new Date(s);
-  if (isNaN(d)) return s;
+  if (isNaN(d.getTime())) return s;
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 function sleep(ms) {
@@ -1590,7 +1598,8 @@ function sleep(ms) {
    EVENT DELEGATION (CSP-friendly: no inline handlers)
    ════════════════════════════════════════════ */
 document.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-action]');
+  const tgt = /** @type {any} */ (e.target);
+  const t = tgt.closest('[data-action]');
   if (!t) return;
   const action = t.dataset.action,
     npi = t.dataset.npi;
@@ -1599,8 +1608,8 @@ document.addEventListener('click', (e) => {
       handleSearch();
       break;
     case 'quick-search': {
-      const z = document.getElementById('zip-input'),
-        s = document.getElementById('specialty-select');
+      const z = byId('zip-input'),
+        s = byId('specialty-select');
       if (z) z.value = t.dataset.zip || '';
       if (s) s.value = t.dataset.spec || '';
       handleSearch();
@@ -1611,7 +1620,7 @@ document.addEventListener('click', (e) => {
       toggleFavorite(npi);
       break;
     case 'open-detail':
-      if (!e.target.closest('.save-btn')) openDetail(t.dataset.npi);
+      if (!tgt.closest('.save-btn')) openDetail(t.dataset.npi);
       break;
     case 'close-detail':
       closeDetail();
@@ -1629,7 +1638,7 @@ document.addEventListener('click', (e) => {
       setView('map');
       break;
     case 'toggle-adv':
-      openAdv(document.getElementById('adv-fields').classList.contains('open') ? false : true);
+      openAdv(byId('adv-fields').classList.contains('open') ? false : true);
       break;
     case 'toggle-plan':
       togglePlan(t.dataset.plan);
@@ -1679,7 +1688,7 @@ async function shareNpi(npi) {
    ════════════════════════════════════════════ */
 async function bootstrap() {
   // populate state dropdown
-  const st = document.getElementById('state-select');
+  const st = byId('state-select');
   US_STATES.forEach((s) => {
     const o = document.createElement('option');
     o.value = s;
@@ -1696,23 +1705,23 @@ async function bootstrap() {
   // Reveal the "For providers" claim CTA only when a real inbox is configured;
   // otherwise it stays hidden (no dead mailto). See CLAIM_ENABLED.
   if (CLAIM_ENABLED) {
-    const cta = document.getElementById('provider-cta');
+    const cta = byId('provider-cta');
     if (cta) cta.hidden = false;
   }
 
-  document.getElementById('zip-input').addEventListener('keydown', (e) => {
+  byId('zip-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') handleSearch();
   });
-  document.getElementById('zip-input').addEventListener('input', (e) => {
+  byId('zip-input').addEventListener('input', (e) => {
     e.target.value = e.target.value.replace(/\D/g, '').slice(0, 5);
   });
-  document.getElementById('npi-input').addEventListener('input', (e) => {
+  byId('npi-input').addEventListener('input', (e) => {
     e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
   });
-  document.getElementById('name-input').addEventListener('keydown', (e) => {
+  byId('name-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') handleSearch();
   });
-  document.getElementById('sort-select').addEventListener('change', (e) => {
+  byId('sort-select').addEventListener('change', (e) => {
     state.sort = e.target.value;
     applySort();
     renderCards();

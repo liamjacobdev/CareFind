@@ -126,7 +126,15 @@ test('a11y: map view', async ({ page }) => {
   // alongside the list. Toggle only when present, then scan the map state either way.
   const toggle = page.locator('[data-action="view-map"]');
   if (await toggle.isVisible()) await toggle.click();
-  await page.waitForTimeout(500); // let Leaflet + markers settle
+  // Wait for the map to actually initialize (Leaflet loads from a CDN) before scanning,
+  // so axe sees the settled marker DOM rather than racing a mid-render frame. The map is
+  // best-effort (a blocked CDN leaves the list as the accessible path), so don't fail if
+  // it never appears — just give it a bounded chance to settle.
+  await page
+    .locator('.leaflet-container')
+    .waitFor({ state: 'attached', timeout: 4000 })
+    .catch(() => {});
+  await page.waitForTimeout(300);
   await scan(page, 'map view');
 });
 
