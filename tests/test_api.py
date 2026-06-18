@@ -51,10 +51,107 @@ def test_healthz(client):
     assert "data_freshness" in body
 
 
+def test_providers_search_radius_geocode_and_verified_filter(client, monkeypatch):
+    """Exercises the radius pool, insurance annotate + verified filter, geocoding, and
+    the server-authoritative distance filter/sort end-to-end."""
+    db.medicare_add_many(["1003000126"])  # only this NPI is Medicare-enrolled
+
+    async def batch(items, budget_seconds=None):
+        return {"1003000126": [30.770, -86.570], "9999999999": [30.780, -86.580]}
+
+    async def one(q):
+        return [30.771, -86.571]  # the ZIP center
+
+    monkeypatch.setattr(main.geocode, "geocode_batch", batch)
+    monkeypatch.setattr(main.geocode, "geocode_one", one)
+
+    r = client.get("/api/providers/search", params={
+        "zip": "32536", "radius": 25, "accepts": "medicare",
+        "accepts_mode": "verified", "geocode": "true", "limit": 10})
+    assert r.status_code == 200
+    data = r.json()
+    npis = [p["npi"] for p in data["providers"]]
+    assert npis == ["1003000126"]                  # verified Medicare filter dropped the other
+    assert data["applied_filters"] == ["medicare"]
+    assert data["providers"][0]["distance"] is not None  # distance computed + within radius
+
+
+def test_providers_search_no_geocode_returns_all(client):
+    """geocode=false + no radius: no geocoding, results returned unfiltered."""
+    r = client.get("/api/providers/search", params={"zip": "32536", "geocode": "false", "limit": 10})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["count"] == 2 and all(p["lat"] is None for p in data["providers"])
+
+
+def test_providers_search_truncates_to_limit(client):
+    r = client.get("/api/providers/search", params={"zip": "32536", "geocode": "false", "limit": 1})
+    data = r.json()
+    assert data["count"] == 1 and data["total"] == 2 and data["truncated"] is True
+
+
+def test_providers_search_estimated_is_context_not_filter(client):
+    """A national estimated payer ('operates here') is non-filtering area context in
+    'any' mode — it lands in context_plans, not applied_filters, and narrows nothing."""
+    r = client.get("/api/providers/search", params={
+        "zip": "32536", "geocode": "false", "accepts": "aetna", "accepts_mode": "any", "limit": 10})
+    data = r.json()
+    assert "aetna" in data["context_plans"]
+    assert data["applied_filters"] == []     # national estimate doesn't filter
+    assert data["count"] == 2                 # so nothing was dropped
+
+
+def test_config_load_payers_tolerates_malformed_file(tmp_path, monkeypatch):
+    bad = tmp_path / "payers.json"
+    bad.write_text("{ not json", encoding="utf-8")
+    monkeypatch.setattr(main.settings, "payers_file", str(bad))
+    assert main.settings.load_payers() == []
+
+
+@pytest.mark.asyncio
+async def test_geocode_breaker_degrades_to_no_coords(temp_db, monkeypatch):
+    """D4 geocode breaker: when the chain is down, geocoding degrades to None (no
+    fabricated coordinate) and fast-fails once open."""
+    import httpx
+    import respx
+
+    from app import geocode
+    from app.circuit import CircuitBreaker
+    monkeypatch.setattr(geocode, "_geo_breaker", CircuitBreaker("geo-test", fail_max=2))
+    monkeypatch.setattr(geocode.settings, "geocode_use_census", True)
+    with respx.mock:
+        respx.get(geocode.settings.census_base + "/geocoder/locations/onelineaddress").mock(
+            return_value=httpx.Response(503))
+        respx.get(geocode.settings.nominatim_base + "/search").mock(return_value=httpx.Response(503))
+        assert await geocode.geocode_one("1 Main St") is None
+        assert await geocode.geocode_one("2 Oak St") is None
+    assert geocode._geo_breaker.state == "open"
+
+
 def test_readyz_reports_ready(client):
     """D4 readiness: datastore reachable + registry built."""
     r = client.get("/readyz")
     assert r.status_code == 200 and r.json()["ready"] is True
+
+
+def test_trigger_ingest_handles_all_sources(client, monkeypatch, tmp_path):
+    """The background ingest runner (C3): tic with no sources exits cleanly (caught),
+    medicare with no URL is skipped, and a configured medicare URL is ingested."""
+    # tic with no configured sources -> ingest_tic_job.run() raises SystemExit, caught.
+    monkeypatch.setattr(main.settings, "tic_sources_file", str(tmp_path / "none.json"))
+    main._trigger_ingest("tic")  # must not raise
+
+    # medicare with no URL -> logged-skip branch.
+    monkeypatch.setattr(main.settings, "medicare_ingest_url", "")
+    main._trigger_ingest("medicare")
+
+    # medicare with a URL -> calls the ingest (mocked so no network).
+    called = {}
+    monkeypatch.setattr(main.settings, "medicare_ingest_url", "https://cms.example/file.csv")
+    import app.ingest_medicare as im
+    monkeypatch.setattr(im, "ingest", lambda url: called.setdefault("url", url) or 5)
+    main._trigger_ingest("medicare")
+    assert called["url"] == "https://cms.example/file.csv"
 
 
 def test_healthz_flips_to_503_when_a_source_is_stale(client):

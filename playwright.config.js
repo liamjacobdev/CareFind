@@ -7,5 +7,10 @@ export default defineConfig({
   fullyParallel: true,
   reporter: 'list',
   use: { headless: true },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // Cross-engine (E1): the golden journey + axe sweep run on all three browser engines.
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+  ],
 });

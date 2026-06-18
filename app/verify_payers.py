@@ -175,7 +175,8 @@ def render_ledger(results: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def write_ledger(content: str, path: Path = _LEDGER_PATH) -> Path:
+def write_ledger(content: str, path: Path | None = None) -> Path:
+    path = path or _LEDGER_PATH   # resolved at call time so tests can redirect it
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return path

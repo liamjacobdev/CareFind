@@ -157,6 +157,11 @@ describe('buildNpiParams — NPPES query construction (mirrors test_nppes.py)', 
     const p = get({ name: 'Gulf Coast', type: 'NPI-2', st: 'FL', limit: 25 });
     expect(p.organization_name).toBe('Gulf Coast*');
   });
+  it('treats a single-token person name as a last name', () => {
+    const p = get({ name: 'Smith', city: 'Crestview', st: 'FL', limit: 25 });
+    expect(p.last_name).toBe('Smith*');
+    expect(p.first_name).toBeUndefined();
+  });
   it('maps a specialty label to its taxonomy_description', () => {
     const p = get({ zip: '32536', specialty: 'Cardiology', limit: 25 });
     expect(p.taxonomy_description).toBe(TAXONOMY_MAP['Cardiology']);
@@ -210,6 +215,30 @@ describe('buildProviders — mirrors the backend normalize() shape', () => {
     expect(p.specialty).toBe('Healthcare Provider');
     expect(p.initials).toBe('GC');
     expect(p.fullAddress).toBe('');
+  });
+
+  it('covers the field-fallback branches (male, inactive, no name, non-primary taxonomy)', () => {
+    const [p] = buildProviders([{
+      number: 2, enumeration_type: 'NPI-1',
+      basic: { gender: 'M', status: 'I' },                       // male; inactive status
+      addresses: [{ address_purpose: 'LOCATION', city: 'Tampa', state: 'FL' }],  // no mailing
+      taxonomies: [{ desc: 'Family Medicine', primary: false }], // no primary -> taxes[0]
+    }]);
+    expect(p.gender).toBe('Male');
+    expect(p.status).toBe('I');               // non-'A' falls through to the raw value
+    expect(p.name).toBe('Unnamed Provider');  // no first/last
+    expect(p.initials).toBe('DR');            // initials fallback
+    expect(p.specialty).toBe('Family Medicine');
+    expect(p.mailingAddress).toBe('');        // no MAILING address
+  });
+
+  it('falls back to basic.name then a generic label for an org', () => {
+    const [byName] = buildProviders([{ number: 3, enumeration_type: 'NPI-2',
+      basic: { name: 'acme health' }, addresses: [], taxonomies: [] }]);
+    expect(byName.name).toBe('Acme Health');
+    const [generic] = buildProviders([{ number: 4, enumeration_type: 'NPI-2',
+      basic: {}, addresses: [], taxonomies: [] }]);
+    expect(generic.name).toBe('Healthcare Organization');
   });
 });
 

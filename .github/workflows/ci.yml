@@ -27,8 +27,8 @@ jobs:
       - name: Audit shipped Python deps (pip-audit)
         run: pip-audit -r requirements.txt
 
-      - name: Run tests
-        run: pytest -q
+      - name: Run tests (≥90% line+branch coverage gate, E1)
+        run: pytest --cov=app --cov-branch --cov-fail-under=90 -q
 
   frontend:
     runs-on: ubuntu-latest
@@ -58,10 +58,10 @@ jobs:
       - name: Run unit tests (with coverage threshold)
         run: npm test
 
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browsers (chromium + firefox + webkit)
+        run: npx playwright install --with-deps chromium firefox webkit
 
-      - name: Run e2e smoke
+      - name: Run e2e (golden journey + axe, all three engines)
         run: npm run test:e2e
 
   secrets:

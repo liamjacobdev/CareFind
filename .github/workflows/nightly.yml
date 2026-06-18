@@ -1,0 +1,37 @@
+# Nightly live-integration (E1): exercise the REAL public upstreams so a regression in
+# NPPES, the geocoders, or a validated FHIR Plan-Net endpoint is caught within a day.
+# Also regenerates the provenance ledger from live validation.
+name: Nightly live integration
+
+on:
+  schedule:
+    - cron: "0 7 * * *"   # 07:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Validate public FHIR Plan-Net endpoints (live) + regenerate ledger
+        run: python -m app.verify_payers
+
+      - name: Live integration smoke (real NPPES + geocode + Plan-Net round-trip)
+        env:
+          CAREFIND_LIVE: "1"
+        run: pytest tests/test_live_integration.py -q
+
+      # Surface a drifted provenance ledger as an artifact for review (don't auto-commit).
+      - name: Upload regenerated ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: provenance-ledger
+          path: docs/provenance.md
