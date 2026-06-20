@@ -199,7 +199,56 @@ const state = {
 let mapInstance = null,
   mapMarkers = {},
   centerMarker = null,
-  markerClusterLayer = null;
+  markerClusterLayer = null,
+  tileLayer = null;
+
+/* ════════════════════════════════════════════
+   THEME (light / dark) — persisted, system-aware
+   ════════════════════════════════════════════ */
+const THEME_KEY = 'carefind_theme';
+// Brand-matched tiles per theme: CARTO Voyager (light) / Dark Matter (dark).
+const TILES = {
+  light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+};
+const THEME_COLOR = { light: '#0d241d', dark: '#060f0b' };
+function currentTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+}
+function reducedMotion() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+// Run a DOM update inside a View Transition for a smooth crossfade, when supported and
+// motion is allowed; otherwise update immediately. Used for tab + list/map swaps.
+function withVT(fn) {
+  if (document.startViewTransition && !reducedMotion()) document.startViewTransition(fn);
+  else fn();
+}
+// Set the header results count with a quick "pop" so a new total feels alive.
+function setResultsCount(text) {
+  const el = byId('results-count-header');
+  if (!el) return;
+  el.textContent = text;
+  if (text && !reducedMotion()) {
+    el.classList.remove('count-pop');
+    void el.offsetWidth; // restart the animation
+    el.classList.add('count-pop');
+  }
+}
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', THEME_COLOR[theme]);
+  // Re-skin the map tiles to match without rebuilding the map.
+  if (mapInstance && tileLayer) tileLayer.setUrl(TILES[theme]);
+}
+function toggleTheme() {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch (_) {}
+  applyTheme(next);
+}
 
 /* ════════════════════════════════════════════
    NETWORK — same-origin when served, resilient fallback for file://
@@ -318,7 +367,7 @@ function initMap() {
   }
   try {
     mapInstance = L.map('map', { center: [39.5, -98.35], zoom: 4, zoomControl: true, attributionControl: true });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    tileLayer = L.tileLayer(TILES[currentTheme()], {
       maxZoom: 19,
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
@@ -562,8 +611,7 @@ async function handleSearch() {
         applySort();
         renderCards();
         if (mapInstance) plotMarkers(); // coords are already attached — pins now, no wait
-        byId('results-count-header').textContent =
-          `${providers.length} provider${providers.length !== 1 ? 's' : ''} found`;
+        setResultsCount(`${providers.length} provider${providers.length !== 1 ? 's' : ''} found`);
         finishSearch();
         return;
       }
@@ -592,8 +640,7 @@ async function handleSearch() {
     applySort();
     renderCards();
     if (mapInstance) plotMarkers();
-    byId('results-count-header').textContent =
-      `${state.providers.length} provider${state.providers.length !== 1 ? 's' : ''} found`;
+    setResultsCount(`${state.providers.length} provider${state.providers.length !== 1 ? 's' : ''} found`);
     geocodeProviders(token);
   } catch (err) {
     if (token !== state.token) return;
@@ -884,8 +931,7 @@ async function geocodeProviders(token) {
         state.providers.forEach(addOrMoveMarker);
         applySort();
         renderCards();
-        byId('results-count-header').textContent =
-          `${state.providers.length} provider${state.providers.length !== 1 ? 's' : ''} found`;
+        setResultsCount(`${state.providers.length} provider${state.providers.length !== 1 ? 's' : ''} found`);
       }
     }
     if (state.sort === 'distance') {
@@ -1385,10 +1431,12 @@ function exportFavorites(kind) {
    TABS / VIEW
    ════════════════════════════════════════════ */
 function switchTab(tab) {
-  state.activeTab = tab;
-  byId('tab-results').classList.toggle('active', tab === 'results');
-  byId('tab-favorites').classList.toggle('active', tab === 'favorites');
-  renderCards();
+  withVT(() => {
+    state.activeTab = tab;
+    byId('tab-results').classList.toggle('active', tab === 'results');
+    byId('tab-favorites').classList.toggle('active', tab === 'favorites');
+    renderCards();
+  });
 }
 function switchTabSilent(tab) {
   state.activeTab = tab;
@@ -1396,11 +1444,13 @@ function switchTabSilent(tab) {
   byId('tab-favorites').classList.toggle('active', tab === 'favorites');
 }
 function setView(which) {
-  document.body.classList.toggle('show-map', which === 'map');
-  document.querySelectorAll('.view-toggle button').forEach((/** @type {any} */ b) => {
-    const on = b.dataset.action === `view-${which}`;
-    b.classList.toggle('active', on);
-    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  withVT(() => {
+    document.body.classList.toggle('show-map', which === 'map');
+    document.querySelectorAll('.view-toggle button').forEach((/** @type {any} */ b) => {
+      const on = b.dataset.action === `view-${which}`;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
   });
   if (which === 'map' && mapInstance) setTimeout(() => mapInstance.invalidateSize(), 60);
 }
@@ -1652,6 +1702,9 @@ document.addEventListener('click', (e) => {
     case 'use-location':
       useLocation();
       break;
+    case 'toggle-theme':
+      toggleTheme();
+      break;
     case 'retry-map':
       retryMap();
       break;
@@ -1695,6 +1748,10 @@ async function bootstrap() {
     o.textContent = s;
     st.appendChild(o);
   });
+
+  // Sync the address-bar theme-color with the theme the pre-paint init chose (the
+  // <head> script only sets data-theme; the meta + map tiles follow here).
+  applyTheme(currentTheme());
 
   loadFavorites();
   loadGeocache();

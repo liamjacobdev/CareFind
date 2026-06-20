@@ -29,13 +29,18 @@ export default [
     },
   },
   {
-    // Browser app code: the page bundle source, the injected config, the pure logic.
+    // Browser app code: the page bundle source, the injected config, the pure logic,
+    // and the tiny pre-paint theme init (classic <head> script, not a module).
     files: ['src/**/*.js', 'carefind.logic.js', 'carefind.config.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: { ...globals.browser, L: 'readonly' }, // L = Leaflet, loaded from a CDN at runtime
     },
+  },
+  {
+    files: ['carefind.theme.js'],
+    languageOptions: { ecmaVersion: 2022, sourceType: 'script', globals: globals.browser },
   },
   {
     // Service worker: its own global scope (self, caches, fetch, clients, ...).
@@ -52,8 +57,9 @@ export default [
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: globals.node },
   },
   {
-    // Tests (Vitest + Playwright import their APIs; run under Node).
+    // Tests (Vitest + Playwright import their APIs; run under Node). Playwright specs
+    // also run `page.evaluate` callbacks in the browser, so allow browser globals too.
     files: ['tests-js/**/*.js', 'tests-e2e/**/*.js'],
-    languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: { ...globals.node } },
+    languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: { ...globals.node, ...globals.browser } },
   },
 ];

@@ -73,6 +73,33 @@ jobs:
       - name: Run e2e (golden journey + axe, all three engines)
         run: npm run test:e2e
 
+  # Visual-regression (V7): runs on windows-latest because the committed pixel baselines
+  # are OS-specific (generated locally on Windows via `npm run test:visual:update`). Kept
+  # off the Linux `frontend` job so the cross-engine e2e there needs no baselines.
+  visual:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build frontend bundle
+        run: npm run build
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+      - name: Visual regression (themes × breakpoints)
+        run: npm run test:visual
+      - name: Upload diff on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diff
+          path: test-results/
+          retention-days: 7
+
   secrets:
     runs-on: ubuntu-latest
     steps:

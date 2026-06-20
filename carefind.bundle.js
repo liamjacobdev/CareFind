@@ -36,16 +36,26 @@
     Chiropractor: "Chiropractor"
   };
   var PALETTE = [
-    "#0f7a5f",
-    "#2563a8",
-    "#7c5ce0",
-    "#a8551e",
-    "#b8344f",
-    "#3f7d3a",
-    "#0e6f8a",
-    "#9a5ab0",
-    "#92681a",
-    "#1f8a6d"
+    "#0c7152",
+    // emerald (brand)
+    "#0e6f72",
+    // deep teal
+    "#2b5e8c",
+    // muted azure
+    "#574d8a",
+    // dusk indigo
+    "#7a4668",
+    // plum
+    "#9a4f39",
+    // terracotta
+    "#876521",
+    // bronze / champagne-dark
+    "#2f6d4a",
+    // pine
+    "#834454",
+    // wine
+    "#2c5f63"
+    // slate teal
   ];
   function toTitleCase(s) {
     if (!s) return "";
@@ -396,6 +406,47 @@
   var mapMarkers = {};
   var centerMarker = null;
   var markerClusterLayer = null;
+  var tileLayer = null;
+  var THEME_KEY = "carefind_theme";
+  var TILES = {
+    light: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+    dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+  };
+  var THEME_COLOR = { light: "#0d241d", dark: "#060f0b" };
+  function currentTheme() {
+    return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  }
+  function reducedMotion() {
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }
+  function withVT(fn) {
+    if (document.startViewTransition && !reducedMotion()) document.startViewTransition(fn);
+    else fn();
+  }
+  function setResultsCount(text) {
+    const el = byId("results-count-header");
+    if (!el) return;
+    el.textContent = text;
+    if (text && !reducedMotion()) {
+      el.classList.remove("count-pop");
+      void el.offsetWidth;
+      el.classList.add("count-pop");
+    }
+  }
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", THEME_COLOR[theme]);
+    if (mapInstance && tileLayer) tileLayer.setUrl(TILES[theme]);
+  }
+  function toggleTheme() {
+    const next = currentTheme() === "dark" ? "light" : "dark";
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch (_) {
+    }
+    applyTheme(next);
+  }
   function npiCandidates(params) {
     const qs = params.toString();
     const full = NPI_API + "?" + qs;
@@ -496,7 +547,7 @@
     }
     try {
       mapInstance = L.map("map", { center: [39.5, -98.35], zoom: 4, zoomControl: true, attributionControl: true });
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+      tileLayer = L.tileLayer(TILES[currentTheme()], {
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
       }).addTo(mapInstance);
@@ -721,7 +772,7 @@
           applySort();
           renderCards();
           if (mapInstance) plotMarkers();
-          byId("results-count-header").textContent = `${providers.length} provider${providers.length !== 1 ? "s" : ""} found`;
+          setResultsCount(`${providers.length} provider${providers.length !== 1 ? "s" : ""} found`);
           finishSearch();
           return;
         }
@@ -744,7 +795,7 @@
       applySort();
       renderCards();
       if (mapInstance) plotMarkers();
-      byId("results-count-header").textContent = `${state.providers.length} provider${state.providers.length !== 1 ? "s" : ""} found`;
+      setResultsCount(`${state.providers.length} provider${state.providers.length !== 1 ? "s" : ""} found`);
       geocodeProviders(token);
     } catch (err) {
       if (token !== state.token) return;
@@ -973,7 +1024,7 @@
           state.providers.forEach(addOrMoveMarker);
           applySort();
           renderCards();
-          byId("results-count-header").textContent = `${state.providers.length} provider${state.providers.length !== 1 ? "s" : ""} found`;
+          setResultsCount(`${state.providers.length} provider${state.providers.length !== 1 ? "s" : ""} found`);
         }
       }
       if (state.sort === "distance") {
@@ -1396,10 +1447,12 @@
     showToast(`Exported ${items.length} provider${items.length !== 1 ? "s" : ""}`);
   }
   function switchTab(tab) {
-    state.activeTab = tab;
-    byId("tab-results").classList.toggle("active", tab === "results");
-    byId("tab-favorites").classList.toggle("active", tab === "favorites");
-    renderCards();
+    withVT(() => {
+      state.activeTab = tab;
+      byId("tab-results").classList.toggle("active", tab === "results");
+      byId("tab-favorites").classList.toggle("active", tab === "favorites");
+      renderCards();
+    });
   }
   function switchTabSilent(tab) {
     state.activeTab = tab;
@@ -1407,11 +1460,13 @@
     byId("tab-favorites").classList.toggle("active", tab === "favorites");
   }
   function setView(which) {
-    document.body.classList.toggle("show-map", which === "map");
-    document.querySelectorAll(".view-toggle button").forEach((b) => {
-      const on = b.dataset.action === `view-${which}`;
-      b.classList.toggle("active", on);
-      b.setAttribute("aria-pressed", on ? "true" : "false");
+    withVT(() => {
+      document.body.classList.toggle("show-map", which === "map");
+      document.querySelectorAll(".view-toggle button").forEach((b) => {
+        const on = b.dataset.action === `view-${which}`;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+      });
     });
     if (which === "map" && mapInstance) setTimeout(() => mapInstance.invalidateSize(), 60);
   }
@@ -1631,6 +1686,9 @@
       case "use-location":
         useLocation();
         break;
+      case "toggle-theme":
+        toggleTheme();
+        break;
       case "retry-map":
         retryMap();
         break;
@@ -1669,6 +1727,7 @@
       o.textContent = s;
       st.appendChild(o);
     });
+    applyTheme(currentTheme());
     loadFavorites();
     loadGeocache();
     updateFavBadge();

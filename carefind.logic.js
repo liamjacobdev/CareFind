@@ -28,17 +28,20 @@ const TAXONOMY_MAP = {
   'Nurse Practitioner': 'Nurse Practitioner',
   Chiropractor: 'Chiropractor',
 };
+// Avatar fills: a curated set of deep jewel tones that harmonize with the emerald +
+// champagne brand (no random web blues/purples). Each is dark enough for white
+// initials to clear WCAG AA. Assigned deterministically per provider by hash.
 const PALETTE = [
-  '#0f7a5f',
-  '#2563a8',
-  '#7c5ce0',
-  '#a8551e',
-  '#b8344f',
-  '#3f7d3a',
-  '#0e6f8a',
-  '#9a5ab0',
-  '#92681a',
-  '#1f8a6d',
+  '#0c7152', // emerald (brand)
+  '#0e6f72', // deep teal
+  '#2b5e8c', // muted azure
+  '#574d8a', // dusk indigo
+  '#7a4668', // plum
+  '#9a4f39', // terracotta
+  '#876521', // bronze / champagne-dark
+  '#2f6d4a', // pine
+  '#834454', // wine
+  '#2c5f63', // slate teal
 ];
 
 function toTitleCase(s) {

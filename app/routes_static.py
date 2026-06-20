@@ -15,6 +15,7 @@ _FRONTEND = Path(__file__).resolve().parent.parent / "carefind.html"
 _FRONTEND_LOGIC = _FRONTEND.parent / "carefind.logic.js"
 _FRONTEND_BUNDLE = _FRONTEND.parent / "carefind.bundle.js"
 _FRONTEND_CONFIG = _FRONTEND.parent / "carefind.config.js"
+_FRONTEND_THEME = _FRONTEND.parent / "carefind.theme.js"
 _MANIFEST = _FRONTEND.parent / "manifest.webmanifest"
 _SERVICE_WORKER = _FRONTEND.parent / "sw.js"
 _ICON = _FRONTEND.parent / "carefind-icon.svg"
@@ -46,6 +47,14 @@ def frontend_config(request: Request) -> Response:
     # Deployment config (data only), external so the page has no inline script (D3).
     return _static_file(request, _FRONTEND_CONFIG, "application/javascript",
                         "carefind.config.js not found next to the app package.")
+
+
+@router.get("/carefind.theme.js")
+def frontend_theme(request: Request) -> Response:
+    # Pre-paint theme init (data-theme from saved choice / OS), in <head> so dark-mode
+    # users see no flash of light. External + same-origin to keep the strict CSP.
+    return _static_file(request, _FRONTEND_THEME, "application/javascript",
+                        "carefind.theme.js not found next to the app package.")
 
 
 @router.get("/carefind.bundle.js")
