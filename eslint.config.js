@@ -4,7 +4,6 @@ import js from '@eslint/js';
 import globals from 'globals';
 
 export default [
-  // loadtest/ runs under k6 (its own runtime: __ENV, k6/* modules) — not Node/browser.
   {
     ignores: [
       'carefind.bundle.js',
@@ -12,7 +11,6 @@ export default [
       'coverage/**',
       'test-results/**',
       'playwright-report/**',
-      'loadtest/**',
       '**/.venv/**',
     ],
   },
