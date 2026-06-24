@@ -8,15 +8,17 @@ registration; **unusable** = returns a Bundle but can't answer per-NPI truthfull
 (ignores the filter, or returns nothing for listed providers); **unreachable** = no
 response from the validation environment; **candidate** = not yet checked.
 
-_Last generated: 2026-06-16_
+_Last generated: 2026-06-23_
 
 | Payer / program | Catalog id | Category | States | Status | Bundle total | Checked | Note |
 |---|---|---|---|---|---|---|---|
-| Johns Hopkins Advantage MD (Medicare Advantage) | `advantage_md` | medicare_advantage | MD | validated | 107,487 | 2026-06-16 | Johns Hopkins MA plan; same public host as Priority Partners. NPI round-trip verified. |
-| Priority Partners (JHHP, MD Medicaid) | `priority_partners` | medicaid | MD | validated | 83,024 | 2026-06-16 | Maryland Medicaid MCO (Johns Hopkins Health Plans). NPI round-trip verified. |
+| Johns Hopkins Advantage MD (Medicare Advantage) | `advantage_md` | medicare_advantage | MD | validated | 107,824 | 2026-06-23 | Johns Hopkins MA plan; same public host as Priority Partners. NPI round-trip verified. |
+| Cigna | `cigna` | commercial | national | validated | — | 2026-06-23 | National commercial. Public, unauthenticated Da Vinci PDEX Plan-Net; PractitionerRoles carry network-reference extensions to Cigna Network Organizations. NPI round-trip verified (bogus NPI -> empty; a listed NPI -> active, network-linked role). |
+| Priority Partners (JHHP, MD Medicaid) | `priority_partners` | medicaid | MD | validated | 83,527 | 2026-06-23 | Maryland Medicaid MCO (Johns Hopkins Health Plans). NPI round-trip verified. |
+| Connecticut Medicaid (HUSKY) directory | `ct_medicaid` | medicaid | CT | gated | — | — | HTTP 401 |
 | Johns Hopkins EHP (commercial) | `jhhp_ehp` | commercial | MD | gated | — | — | HTTP 401 |
-| Connecticut Medicaid (HUSKY) directory | `ct_medicaid` | medicaid | CT | unusable | — | — | HTTP 400 |
-| Premera Blue Cross (WA/AK) | `premera_bcbs` | commercial | WA, AK | unusable | 94,993 | — | a listed NPI resolves to False, not in-network (no network link, or per-NPI search returns nothing) |
+| Premera Blue Cross (WA/AK) | `premera_bcbs` | commercial | WA, AK | unusable | 94,995 | — | a listed NPI resolves to False, not in-network (no network link, or per-NPI search returns nothing) |
 | Washington Apple Health (Medicaid) directory | `wa_medicaid` | medicaid | WA | unusable | — | — | a listed NPI resolves to False, not in-network (no network link, or per-NPI search returns nothing) |
+| Humana | `humana` | commercial | national | unreachable | — | — | ReadTimeout: The read operation timed out |
 
-**2 validated / 6 tracked.** The freely-validatable, NPI-usable public set is small — most nationals gate behind developer registration and many public directories don't honor per-NPI search. This ledger grows only as endpoints genuinely pass the round-trip, never by assertion.
+**3 validated / 8 tracked.** The freely-validatable, NPI-usable public set is small — most nationals gate behind developer registration and many public directories don't honor per-NPI search. This ledger grows only as endpoints genuinely pass the round-trip, never by assertion.

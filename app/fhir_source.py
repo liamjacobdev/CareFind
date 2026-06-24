@@ -25,6 +25,7 @@ class FhirPlanNetSource(InsuranceSource):
     """One configured payer's public FHIR Plan-Net Provider Directory (verified)."""
     confidence = "verified"
     kind = "commercial"
+    requires_network = True  # answering = a live per-NPI directory call; query on demand only
 
     def __init__(self, cfg: dict[str, Any]) -> None:
         self.id = cfg["id"]

@@ -200,6 +200,30 @@ async def test_verified_fhir_carries_per_npi_provenance(temp_db, monkeypatch):
     assert isinstance(r["fetched_at"], float) and r["fetched_at"] > 0
 
 
+@respx.mock
+@pytest.mark.asyncio
+async def test_network_source_queried_only_on_demand(temp_db, monkeypatch):
+    """A live FHIR Plan-Net source costs a per-NPI directory call, so it must NOT fire on
+    an unfiltered search (only=None) — only when its plan is explicitly requested.
+    Otherwise every default search would hit the payer's directory for the whole pool."""
+    base = "https://payer.example/r4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [
+        {"id": "cigna", "label": "Cigna", "base_url": base}])
+    route = respx.get(f"{base}/PractitionerRole").mock(
+        return_value=httpx.Response(200, json=_IN_NETWORK))
+    reg = Registry()
+    reg.build()
+
+    # Unfiltered search: the live directory is never called.
+    await reg.annotate([{"npi": "1111111111", "stateAb": "CA"}], only=None)
+    assert route.call_count == 0
+
+    # Requested explicitly: now it fires and returns a verified answer.
+    ann = await reg.annotate([{"npi": "1111111111", "stateAb": "CA"}], only=["cigna"])
+    assert route.call_count >= 1
+    assert ann["1111111111"]["cigna"]["confidence"] == "verified"
+
+
 @pytest.mark.asyncio
 async def test_estimated_results_carry_no_provenance(temp_db):
     """An estimate must never acquire a source link/date — that's reserved for

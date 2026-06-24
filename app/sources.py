@@ -80,6 +80,12 @@ class InsuranceSource:
     # A public URL a patient can follow to verify this source themselves. Verified
     # sources populate it; it backs the "Verify · checked <date>" deep link (A3).
     source_url = ""
+    # True if answering costs a live per-NPI network round-trip (e.g. a FHIR Plan-Net
+    # directory). Such sources are queried only when their plan is explicitly requested,
+    # never on an unfiltered search — otherwise a default search would fire a directory
+    # call for every provider in the pool. Local sources (Medicare, estimates) leave this
+    # False and always annotate cheaply.
+    requires_network = False
 
     def available(self) -> bool:
         return False

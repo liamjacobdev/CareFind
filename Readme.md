@@ -41,21 +41,25 @@ The **validated public endpoints** in `app/planet_registry.py` are wired as *Con
 - a **bogus** NPI must *not* resolve in-network — otherwise the directory ignores the NPI filter and would mark everyone in-network (a fabricated *yes*; e.g. Connecticut's Medicaid directory does this);
 - a **real, listed** NPI must resolve in-network — otherwise per-NPI search returns nothing for everyone (a fabricated *no*; e.g. Premera and the reachable state-Medicaid directories do this).
 
-**Validated public endpoints** (live-checked 2026-06-16; see [docs/provenance.md](docs/provenance.md) for the full, auto-generated ledger including the tracked-but-not-wired ones):
+**Validated public endpoints** (live-checked 2026-06-23; see [docs/provenance.md](docs/provenance.md) for the full, auto-generated ledger including the tracked-but-not-wired ones):
 
 | Payer (scope) | catalog id | Base URL | Round-trip |
 |---|---|---|---|
+| **Cigna (national, commercial)** | `cigna` | `https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1` | ✓ bogus→none, listed→active + network-linked |
 | Priority Partners — Johns Hopkins (MD Medicaid) | `priority_partners` | `https://api.jhhpfhir.com/r4/public-pp` | ✓ bogus→none, listed→in-network (Bundle 83,024) |
 | Johns Hopkins Advantage MD (MD Medicare Advantage) | `advantage_md` | `https://api.jhhpfhir.com/r4/public-ma` | ✓ bogus→none, listed→in-network (Bundle 107,487) |
 
-> **Honest finding (why only two).** National carriers (UnitedHealthcare, Aetna, Cigna,
-> Humana) gate their Plan-Net behind developer registration. Many *public* directories —
-> Premera, and the reachable State Medicaid directories from the
-> [CMS SMA-Endpoint-Directory](https://github.com/CMSgov/SMA-Endpoint-Directory) — return a
-> Bundle but **fail the per-NPI round-trip** (no network links and/or empty results for
-> listed NPIs), so wiring them would fabricate answers. They stay **estimated**, never
-> verified. The freely-validatable, NPI-usable public set is genuinely small today; the
-> registry + `verify_payers` make growing it turnkey, and an endpoint graduates to
+> **Honest finding (the public set is small, but not empty).** **Cigna** publishes a fully
+> public, unauthenticated Da Vinci PDEX Plan-Net directory whose PractitionerRoles carry
+> real network links — it passes the round-trip and is wired as a verified *national*
+> commercial filter. Most other national carriers (UnitedHealthcare, Aetna, Humana) still
+> gate their Plan-Net behind developer registration, or — like the 37 State Medicaid
+> directories in the [CMS SMA-Endpoint-Directory](https://github.com/CMSgov/SMA-Endpoint-Directory)
+> screened here — return a Bundle but **fail the per-NPI round-trip** (no network links, or
+> empty results for listed NPIs), so wiring them would fabricate answers. They stay
+> **estimated**, never verified. Because a live directory call is per-NPI, a verified payer
+> is queried only when you actually filter by it, never on an unfiltered search. The
+> registry + `verify_payers` make growing the set turnkey: an endpoint graduates to
 > *Confirmed* automatically the moment it passes — never by assertion.
 
 ### Source 3 — Transparency-in-Coverage (verified commercial, by ingest)

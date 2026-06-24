@@ -87,6 +87,18 @@ REGISTRY: list[PlanNetEndpoint] = [
         states=["MD"], status="validated", bundle_total=107487, last_checked="2026-06-16",
         note="Johns Hopkins MA plan; same public host as Priority Partners. NPI round-trip verified.",
     ),
+    # First validated NATIONAL commercial payer. Graduates the catalog's `cigna` estimate
+    # to Confirmed (shared id = stable join key), so Cigna flips estimated->verified
+    # everywhere with zero UI change.
+    PlanNetEndpoint(
+        id="cigna", label="Cigna",
+        base_url="https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1", category="commercial",
+        states=None, status="validated", last_checked="2026-06-23",
+        note="National commercial. Public, unauthenticated Da Vinci PDEX Plan-Net; "
+             "PractitionerRoles carry network-reference extensions to Cigna Network "
+             "Organizations. NPI round-trip verified (bogus NPI -> empty; a listed NPI -> "
+             "active, network-linked role).",
+    ),
 
     # ── Tracked but NOT wired — each fails the per-NPI usability bar for a documented
     # reason. Re-check with app/verify_payers.py; if a payer fixes its directory it
@@ -124,6 +136,19 @@ REGISTRY: list[PlanNetEndpoint] = [
         states=["WA"], status="unusable",
         note="Returns a Bundle but practitioner.identifier search returns 0 roles even "
              "for a listed NPI — not usable for per-NPI verification.",
+    ),
+    # National commercial: its public FHIR /metadata responds, but /PractitionerRole
+    # times out from the current validation environment (slow or geo-restricted). A
+    # strong candidate — re-check `python -m app.verify_payers` from an unrestricted
+    # network (or the deployed box); it graduates the catalog `humana` estimate the
+    # moment it passes the round-trip.
+    PlanNetEndpoint(
+        id="humana", label="Humana",
+        base_url="https://fhir.humana.com/api", category="commercial",
+        states=None, status="unreachable",
+        note="Public FHIR base reachable (/metadata 200) but /PractitionerRole read-times-out "
+             "from the validation environment; not yet round-trip-verified. Re-check from an "
+             "unrestricted network.",
     ),
 ]
 

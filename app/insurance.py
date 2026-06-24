@@ -124,6 +124,12 @@ class Registry:
             # Query each source for this plan; merge by confidence then definiteness.
             per_source: list[tuple[InsuranceSource, dict[str, Answer]]] = []
             for s in srcs:
+                # A live per-NPI directory call only fires when the plan is explicitly
+                # requested (`only`). On an unfiltered search we never hit a payer's FHIR
+                # directory for every provider in the pool — it would add a round-trip per
+                # NPI to a search the user didn't even scope to that payer.
+                if only is None and s.requires_network:
+                    continue
                 try:
                     per_source.append((s, await s.check_many_ctx(contexts)))
                 except Exception as e:
