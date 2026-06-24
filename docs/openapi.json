@@ -721,6 +721,22 @@
         "summary": "Frontend Logic"
       }
     },
+    "/carefind.theme.js": {
+      "get": {
+        "operationId": "frontend_theme_carefind_theme_js_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Frontend Theme"
+      }
+    },
     "/coverage": {
       "get": {
         "description": "Verified-coverage-by-state report (C4): which verified programs are available in\neach state, plus the verified-record counts. Computed live, so it reflects the\ncurrent data after every ingest.",
