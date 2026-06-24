@@ -40,8 +40,6 @@ const GEO_KEY = 'carefind_geocache_v1';
 /** @param {string} id @returns {any} */
 const byId = (id) => document.getElementById(id);
 
-// TAXONOMY_MAP and PALETTE now live in carefind.logic.js (imported above),
-// shared verbatim with the Vitest unit tests.
 const CHECK_SVG =
   '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 const US_STATES = [
@@ -735,7 +733,6 @@ async function probeBackend() {
   }
 }
 
-// adaptBackendProvider() now lives in carefind.logic.js (called with state.center).
 function finishSearch() {
   setSearchLoading(false);
   state.searching = false;
@@ -842,7 +839,6 @@ function planLabel(id) {
   return p ? p.label : id;
 }
 
-// buildNpiParams() now lives in carefind.logic.js (shared with the unit tests).
 function describeNoResults(f) {
   if (f.npi) return `No provider is registered under NPI ${f.npi}.`;
   const where = f.zip ? `near ${f.zip}` : f.city ? `in ${f.city}${f.st ? ', ' + f.st : ''}` : '';
@@ -855,10 +851,9 @@ function describeNoResults(f) {
    Standalone (no-backend) path only. It mirrors the backend's normalize()
    (app/main.py) field-for-field; when HAS_BACKEND is set, adaptBackendProvider()
    consumes the server's normalized shape instead and this is unused. Keep the two
-   in sync if you add a field.
+   in sync if you add a field. buildProviders() itself lives in carefind.logic.js
+   (the normalize() mirror, shared with the unit tests).
    ════════════════════════════════════════════ */
-// buildProviders() now lives in carefind.logic.js (the normalize() mirror, shared
-// with the unit tests so the contract can't drift untested).
 
 /* ════════════════════════════════════════════
    GEOCODING — real addresses only, cached
@@ -1632,8 +1627,6 @@ async function useLocation() {
 /* ════════════════════════════════════════════
    UTILITIES
    ════════════════════════════════════════════ */
-// toTitleCase, formatPhone, hashStr, haversine, cssEsc, esc now live in
-// carefind.logic.js (loaded above as globals, shared with the Vitest unit tests).
 function formatDate(s) {
   if (!s) return '';
   const d = new Date(s);

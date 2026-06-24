@@ -16,16 +16,6 @@ ignore = [
   "B008",  # FastAPI dependency-injection idiom uses callables in arg defaults
 ]
 
-[tool.mutmut]
-# Mutation testing (E1): are the tests strong enough to catch injected bugs, not just
-# execute lines? Run focused (it's slow) — e.g. `mutmut run --paths-to-mutate app/insurance.py`
-# for the trust-critical core — then `mutmut results`. Target: surviving mutants only in
-# clearly-equivalent spots; kill rate >= 80% on the verified/insurance modules. Runs on
-# demand / weekly, not per-push (a full run mutates every line and re-runs the suite each).
-paths_to_mutate = "app/"
-runner = "python -m pytest -q -x"
-tests_dir = "tests/"
-
 [tool.mypy]
 python_version = "3.12"
 strict = true
