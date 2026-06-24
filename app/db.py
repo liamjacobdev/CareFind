@@ -32,10 +32,9 @@ def _conn() -> Iterator[sqlite3.Connection]:
 
 
 def backup(dest_path: str) -> str:
-    """Take a consistent online backup of the SQLite DB to `dest_path` (E3). Uses
-    SQLite's backup API, so it's safe while the app is running (WAL-consistent). Returns
-    the destination path. Prod also runs continuous replication (Litestream); this is the
-    programmatic primitive behind the documented restore drill."""
+    """Take a consistent online backup of the SQLite DB to `dest_path`. Uses SQLite's
+    backup API, so it's safe while the app is running (WAL-consistent). Returns the
+    destination path — the programmatic primitive behind the documented restore drill."""
     src = _connect()
     try:
         dest = sqlite3.connect(dest_path)

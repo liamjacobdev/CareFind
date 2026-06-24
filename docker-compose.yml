@@ -34,21 +34,6 @@ services:
       retries: 3
       start_period: 20s
 
-  # Optional continuous backup (E3): replicate the SQLite DB to free object storage so a
-  # restore is one command. Copy litestream.yml.example -> litestream.yml (set the
-  # bucket/endpoint + path: /data/carefind.db), put LITESTREAM_ACCESS_KEY_ID /
-  # LITESTREAM_SECRET_ACCESS_KEY in .env, then uncomment. Restore:
-  #   docker compose run --rm litestream restore -o /data/carefind.db replica
-  # litestream:
-  #   image: litestream/litestream:0.3
-  #   restart: unless-stopped
-  #   depends_on: [api]
-  #   env_file: .env
-  #   volumes:
-  #     - carefind-data:/data
-  #     - ./litestream.yml:/etc/litestream.yml:ro
-  #   command: replicate -config /etc/litestream.yml
-
   caddy:
     image: caddy:2
     restart: unless-stopped

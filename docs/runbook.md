@@ -40,12 +40,10 @@ Set env: `ALLOWED_ORIGINS`, `CAREFIND_TRUST_PROXY=true`, `CAREFIND_ADMIN_TOKEN`,
   it; the ingest cron pings Healthchecks.io so a *missed* run alerts too.
 
 ## Backups & restore (tested)
-SQLite at `CAREFIND_DB` holds the Medicare/TiC indexes + caches. Two free options:
-
-1. **Litestream → object storage** (continuous; e.g. Cloudflare R2 free tier). See
-   `litestream.yml.example`. Restore: `litestream restore -o carefind.db <replica-url>`.
-2. **Scheduled dump** (simplest): `sqlite3 $CAREFIND_DB ".backup backup.db"` on a cron,
-   pushed to the object store.
+SQLite at `CAREFIND_DB` holds the Medicare/TiC indexes + caches. All of it is
+re-derivable from the public sources, so backup is cheap insurance, not a lifeline:
+take a **scheduled dump** — `sqlite3 $CAREFIND_DB ".backup backup.db"` on a cron (or
+call `app.db.backup()`) — and push it to any object store.
 
 **Restore drill** (run quarterly — the indexes are re-ingestable, so the real risk is
 config, not data loss):
