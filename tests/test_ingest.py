@@ -54,6 +54,20 @@ def test_medicare_ingest_streams_remote_under_cap(temp_db, monkeypatch):
     assert db.medicare_count() == 2
 
 
+@respx.mock
+def test_medicare_ingest_tolerates_non_utf8_bytes(temp_db, monkeypatch):
+    # The real CMS export is Windows-1252, not UTF-8: name/address fields carry stray
+    # bytes like 0xa0 (nbsp). We only read the NPI column, so one bad byte in a discarded
+    # field must NOT abort the whole national ingest (regression: it used to raise
+    # UnicodeDecodeError and ingest zero rows).
+    monkeypatch.setattr(settings, "ingest_max_bytes", 10 * 1024 * 1024)
+    csv_body = b"NPI,Name\n1234567893,Cardiolog\xa0y Assoc\n1987654320,B\n"
+    respx.get(CMS).mock(return_value=httpx.Response(200, content=csv_body))
+    added = ingest_medicare.ingest(CMS)
+    assert added == 2
+    assert db.medicare_count() == 2
+
+
 def test_medicare_ingest_local_file_still_works(temp_db):
     # The shipped sample must ingest unchanged (cap only governs remote downloads).
     added = ingest_medicare.ingest("sample_medicare.csv")

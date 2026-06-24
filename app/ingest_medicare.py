@@ -24,6 +24,14 @@ CMS_ENROLLMENT_URL = (
 )
 
 
+# utf-8-sig strips the BOM CMS exports sometimes carry; errors="replace" tolerates the
+# stray non-UTF-8 bytes (e.g. 0xa0 / Windows-1252 nbsp) the real CMS export carries in
+# name/address fields — we only read the NPI column (ASCII digits), so a mangled byte in
+# a discarded field must never abort a multi-million-row national ingest.
+_ENC = "utf-8-sig"
+_ERRORS = "replace"
+
+
 def _open_source(src: str) -> TextIO:
     if src.startswith(("http://", "https://")):
         from .download import stream_to_spool
@@ -31,9 +39,8 @@ def _open_source(src: str) -> TextIO:
         # Stream to a spooled temp file (bounded memory, aborts past the cap) and
         # parse it incrementally — the enrollment CSV is never held whole in RAM.
         spool = stream_to_spool(src)  # bounded by settings.ingest_max_bytes
-        return io.TextIOWrapper(spool, encoding="utf-8-sig", newline="")
-    # utf-8-sig strips the BOM CMS exports sometimes carry.
-    return open(src, encoding="utf-8-sig", newline="")
+        return io.TextIOWrapper(spool, encoding=_ENC, errors=_ERRORS, newline="")
+    return open(src, encoding=_ENC, errors=_ERRORS, newline="")
 
 
 def _find_npi_field(fieldnames: Iterable[str] | None) -> str:
