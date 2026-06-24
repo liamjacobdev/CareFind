@@ -210,8 +210,6 @@ Verified here with an automated suite: app boots, DB/ingest (Medicare + TiC), th
 - [docs/threat-model.md](docs/threat-model.md) — assets, threats, mitigations, residual risks.
 - [docs/a11y-walkthrough.md](docs/a11y-walkthrough.md) — WCAG 2.2 AA checklist + SR walkthrough.
 - [docs/provenance.md](docs/provenance.md) — auto-generated ledger of validated public endpoints.
-- [docs/competitive-analysis.md](docs/competitive-analysis.md) — head-to-head vs. the NPPES site + insurer directories.
-- [docs/audit.md](docs/audit.md) — final re-audit against every category gate, with evidence.
 - API: live Swagger at `/docs`, schema at `/openapi.json`; the committed [docs/openapi.json](docs/openapi.json) is kept current by a test.
 
 ## Contributing & License

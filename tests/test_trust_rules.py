@@ -1,6 +1,6 @@
 """Executable trust rules — the "never overclaim" invariant, enforced not just in prose.
 
-CareFind's single most important promise (PLAN.md §1.1): a green "Confirmed"/verified
+CareFind's single most important promise: a green "Confirmed"/verified
 answer must be traceable to a real source for *that* provider; absence of data is
 "unknown", never "no" and never a fabricated "yes". These tests encode that promise so
 a regression fails CI instead of silently shipping a misleading badge.

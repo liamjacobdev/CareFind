@@ -12,3 +12,8 @@ node_modules/
 test-results/
 playwright-report/
 coverage/
+
+# local caches / artifacts
+.coverage
+.mypy_cache/
+.ruff_cache/
