@@ -11,9 +11,7 @@
     "typecheck": "tsc -p jsconfig.json",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "test:e2e": "playwright test --project=chromium --project=firefox --project=webkit",
-    "test:visual": "playwright test --project=visual",
-    "test:visual:update": "playwright test --project=visual --update-snapshots"
+    "test:e2e": "playwright test --project=chromium --project=firefox --project=webkit"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
