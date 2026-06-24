@@ -7,7 +7,7 @@
   "scripts": {
     "build": "node build.mjs",
     "lint": "eslint .",
-    "format:check": "prettier --check \"src/**/*.js\" \"carefind.logic.js\" \"carefind.config.js\" \"build.mjs\" \"sw.js\" \"*.config.js\" \"tests-js/**/*.js\" \"tests-e2e/**/*.js\"",
+    "format:check": "prettier --check \"src/**/*.js\" \"carefind.logic.js\" \"carefind.config.js\" \"build.mjs\" \"*.config.js\" \"tests-js/**/*.js\" \"tests-e2e/**/*.js\"",
     "typecheck": "tsc -p jsconfig.json",
     "test": "vitest run --coverage",
     "test:watch": "vitest",

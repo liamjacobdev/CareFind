@@ -322,20 +322,8 @@ def test_no_pii_in_logs(client, monkeypatch, caplog):
     assert "203.0.113.77" not in "\n".join(rec.getMessage() for rec in caplog.records)
 
 
-def test_pwa_assets_served(client):
-    """D1: the PWA shell — manifest, service worker, icon — is served so the app is
-    installable and works offline. The page links the manifest and theme-color."""
-    page = client.get("/").text
-    assert 'rel="manifest"' in page and 'name="theme-color"' in page
-
-    m = client.get("/manifest.webmanifest")
-    assert m.status_code == 200 and "manifest" in m.headers["content-type"]
-    assert m.json()["start_url"] == "/" and m.json()["display"] == "standalone"
-
-    sw = client.get("/sw.js")
-    assert sw.status_code == 200 and "javascript" in sw.headers["content-type"]
-    assert "addEventListener" in sw.text and "carefind-shell" in sw.text
-
+def test_app_icon_served(client):
+    """The app icon is served with the right media type (used as favicon / apple-touch)."""
     icon = client.get("/carefind-icon.svg")
     assert icon.status_code == 200 and icon.headers["content-type"].startswith("image/svg")
 

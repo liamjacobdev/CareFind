@@ -43,15 +43,6 @@ export default [
     languageOptions: { ecmaVersion: 2022, sourceType: 'script', globals: globals.browser },
   },
   {
-    // Service worker: its own global scope (self, caches, fetch, clients, ...).
-    files: ['sw.js'],
-    languageOptions: {
-      ecmaVersion: 2022,
-      sourceType: 'script',
-      globals: { ...globals.serviceworker, ...globals.browser },
-    },
-  },
-  {
     // Build + tooling config (Node, ESM).
     files: ['build.mjs', '*.config.js'],
     languageOptions: { ecmaVersion: 2022, sourceType: 'module', globals: globals.node },

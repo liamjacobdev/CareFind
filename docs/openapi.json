@@ -779,22 +779,6 @@
         "summary": "Healthz"
       }
     },
-    "/manifest.webmanifest": {
-      "get": {
-        "operationId": "manifest_manifest_webmanifest_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Manifest"
-      }
-    },
     "/metrics": {
       "get": {
         "description": "In-process operational metrics: request counts by status, geocode/FHIR/NPPES\ncache hit rates, and upstream error count. Protected by the admin token when one is\nconfigured (set CAREFIND_ADMIN_TOKEN in production); open in dev when unset.",
@@ -857,22 +841,6 @@
           }
         },
         "summary": "Readyz"
-      }
-    },
-    "/sw.js": {
-      "get": {
-        "operationId": "service_worker_sw_js_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Service Worker"
       }
     }
   }

@@ -9,8 +9,8 @@ a real source supports.
 ```
                     ┌─────────────────────────────────────────────┐
    Browser          │  carefind.html  (CSP, no inline script)      │
-   (PWA, offline    │  ├─ carefind.config.js   (injected config)   │
-    shell via sw.js)│  ├─ carefind.bundle.js   (esbuild ← src/)    │
+                    │  ├─ carefind.config.js   (injected config)   │
+                    │  ├─ carefind.bundle.js   (esbuild ← src/)    │
                     │  └─ carefind.logic.js    (pure, unit-tested) │
                     └───────────────┬─────────────────────────────┘
                                     │ same-origin /api/* (CORS-locked, rate-limited)

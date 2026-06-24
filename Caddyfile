@@ -20,7 +20,7 @@ api.yourdomain.com {
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "geolocation=(self), camera=(), microphone=(), payment=(), usb=()"
 		Cross-Origin-Opener-Policy "same-origin"
-		Content-Security-Policy "default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; connect-src 'self' https://npiregistry.cms.hhs.gov https://nominatim.openstreetmap.org; worker-src 'self'; manifest-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'"
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; connect-src 'self' https://npiregistry.cms.hhs.gov https://nominatim.openstreetmap.org; base-uri 'none'; object-src 'none'; frame-ancestors 'self'"
 		-Server
 	}
 }

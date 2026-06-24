@@ -1792,13 +1792,5 @@ async function bootstrap() {
   // flag upfront when search won't work because it isn't running.
   if (readUrl()) handleSearch();
   else probeBackend();
-
-  registerServiceWorker();
-}
-// PWA (D1): register the service worker for an offline app shell + cached last search.
-// Only when served over http(s) — a file:// open has no SW. Failure is non-fatal.
-function registerServiceWorker() {
-  if (!SERVED || !('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('SW registration failed:', e));
 }
 document.addEventListener('DOMContentLoaded', bootstrap);

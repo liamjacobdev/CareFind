@@ -19,7 +19,6 @@
     font-src https://fonts.gstatic.com data:;
     img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org;
     connect-src 'self' http://localhost:8000 http://localhost:8787 https://npiregistry.cms.hhs.gov https://nominatim.openstreetmap.org;
-    worker-src 'self'; manifest-src 'self';
     base-uri 'none'; object-src 'none'; frame-ancestors 'self';" />
 
   <meta property="og:title" content="CareFind — official US provider registry search" />
@@ -30,8 +29,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Cpath d='M18 2C11.4 2 6 7.3 6 13.9 6 22.6 18 34 18 34s12-11.4 12-20.1C30 7.3 24.6 2 18 2Z' fill='%230f7a5f'/%3E%3Cpath d='M18 9.2v9.4M13.3 13.9h9.4' stroke='%23fff' stroke-width='3.1' stroke-linecap='round'/%3E%3C/svg%3E" />
-  <!-- PWA (D1): installable + offline app shell. -->
-  <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#0d241d" />
   <link rel="apple-touch-icon" href="/carefind-icon.svg" />
   <!-- Pre-paint theme init (external + same-origin → no inline script, CSP stays strict). -->

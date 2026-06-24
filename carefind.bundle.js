@@ -1759,11 +1759,6 @@
     if (!mapInstance) showMapUnavailable();
     if (readUrl()) handleSearch();
     else probeBackend();
-    registerServiceWorker();
-  }
-  function registerServiceWorker() {
-    if (!SERVED || !("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js").catch((e) => console.warn("SW registration failed:", e));
   }
   document.addEventListener("DOMContentLoaded", bootstrap);
 })();
