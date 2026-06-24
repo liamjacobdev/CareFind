@@ -109,15 +109,13 @@ def test_config_load_payers_tolerates_malformed_file(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_geocode_breaker_degrades_to_no_coords(temp_db, monkeypatch):
-    """D4 geocode breaker: when the chain is down, geocoding degrades to None (no
-    fabricated coordinate) and fast-fails once open."""
+async def test_geocode_degrades_to_no_coords_when_chain_down(temp_db, monkeypatch):
+    """When the geocoder chain is down, geocoding degrades to None — never a
+    fabricated coordinate."""
     import httpx
     import respx
 
     from app import geocode
-    from app.circuit import CircuitBreaker
-    monkeypatch.setattr(geocode, "_geo_breaker", CircuitBreaker("geo-test", fail_max=2))
     monkeypatch.setattr(geocode.settings, "geocode_use_census", True)
     with respx.mock:
         respx.get(geocode.settings.census_base + "/geocoder/locations/onelineaddress").mock(
@@ -125,7 +123,6 @@ async def test_geocode_breaker_degrades_to_no_coords(temp_db, monkeypatch):
         respx.get(geocode.settings.nominatim_base + "/search").mock(return_value=httpx.Response(503))
         assert await geocode.geocode_one("1 Main St") is None
         assert await geocode.geocode_one("2 Oak St") is None
-    assert geocode._geo_breaker.state == "open"
 
 
 def test_openapi_spec_is_published_and_current(client):

@@ -1,6 +1,6 @@
 """The FHIR Plan-Net Provider Directory source (verified tier). Split from insurance.py;
-re-exported by insurance.py. Bounded + cached + circuit-broken; presence-only is never a
-Confirmed yes (see _in_network / ADR 0001, 0005)."""
+re-exported by insurance.py. Timeout-bounded + cached; presence-only is never a
+Confirmed yes (see _in_network)."""
 import asyncio
 import logging
 import time
@@ -9,7 +9,6 @@ from typing import Any
 import httpx
 
 from . import db, metrics
-from .circuit import CircuitBreaker
 from .config import settings
 from .sources import (
     _FHIR_STR_TO_VALUE,
@@ -42,10 +41,6 @@ class FhirPlanNetSource(InsuranceSource):
         # can't match. None -> national (query every NPI).
         states = cfg.get("states")
         self.states: set[str] | None = {s.upper() for s in states} if states else None
-        # Per-payer circuit breaker (D4): if this directory starts failing, fast-fail to
-        # "unknown" instead of eating a timeout per NPI — and one bad payer never affects
-        # another. Never fabricates a yes; a degraded answer is always unknown.
-        self._breaker = CircuitBreaker(f"fhir:{self.id}")
         # A patient-facing verify link: the payer's published directory if given,
         # else the FHIR endpoint we actually queried.
         self.source_url = cfg.get("verify_url") or cfg.get("directory_url") or self.base
@@ -129,27 +124,21 @@ class FhirPlanNetSource(InsuranceSource):
         return False  # not in the directory at all
 
     async def _check(self, client: httpx.AsyncClient, npi: str) -> Answer:
-        if not self._breaker.allow():
-            # This payer's directory is failing — fast-fail to "unknown" (never a yes).
-            return None
         url = f"{self.base}/PractitionerRole"
         params = {"practitioner.identifier": f"{self.npi_system}|{npi}", "_count": "5"}
         try:
             r = await client.get(url, params=params, headers=self._headers())
             if r.status_code == 404:
-                self._breaker.record_success()  # a clean "not found", not an outage
                 return False
             r.raise_for_status()
             bundle = r.json()
         except Exception as e:
             # Degrade to "unknown" (never a fabricated yes), but log which payer/NPI
             # endpoint failed so a down or misconfigured Plan-Net directory is visible.
-            self._breaker.record_failure()
             metrics.incr("upstream_error")
             log.warning("FHIR Plan-Net check failed (payer=%s npi=%s url=%s): %s: %s",
                         self.id, npi, url, type(e).__name__, e)
             return None
-        self._breaker.record_success()
         return self._in_network(bundle)
 
     async def check(self, npi: str) -> Answer:

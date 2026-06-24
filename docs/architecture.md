@@ -23,7 +23,7 @@ a real source supports.
                     │  planet_registry.py · verify_payers.py       │
                     │  ── seams (interfaces.py) ──                 │
                     │  Datastore · CacheBackend · RateLimiter ·    │
-                    │  GeocoderBackend   (+ circuit.py breakers)   │
+                    │  GeocoderBackend                             │
                     └───┬───────────┬───────────┬─────────────┬────┘
                         │           │           │             │
                   ┌─────▼────┐ ┌────▼─────┐ ┌───▼──────┐ ┌────▼─────────┐
@@ -35,7 +35,7 @@ a real source supports.
 
 ## Data flow (a search)
 1. The page calls `GET /api/providers/search` (same origin).
-2. `nppes.search` queries the NPPES registry (cached, retried, circuit-broken) → providers.
+2. `nppes.search` queries the NPPES registry (cached, retried, timeout-bounded) → providers.
 3. `insurance.Registry.annotate` tags each provider per plan with `{value, confidence,
    level, source, source_url?, fetched_at?}` — **verified** (a real source for that NPI)
    or **estimated** (a clearly-labeled catalog guess). Verified always wins; "unknown"
@@ -59,8 +59,8 @@ unknown→yes, estimates never render Confirmed, and verified results always car
 ## Scale-readiness seams (interfaces.py)
 Every external dependency sits behind a Protocol so scaling is a **config swap**, not a
 rewrite: `Datastore` (SQLite→Postgres), `CacheBackend` (in-proc→Redis), `RateLimiter`
-(per-worker→shared), `GeocoderBackend`. Upstreams are bounded + retried + **circuit-broken**
-(`circuit.py`). See the ADRs in [docs/adr/](adr/) for the load-bearing decisions.
+(per-worker→shared), `GeocoderBackend`. Upstreams are timeout-bounded + retried, and
+degrade to "unknown" (never a fabricated answer) on failure.
 
 ## Deploy
 One HTML file + the built bundle + the FastAPI backend, behind Caddy (TLS + the

@@ -59,7 +59,7 @@ the ingests — all data is re-derivable from the public sources.
 ## Incident response
 | Symptom | Check | Action |
 |---|---|---|
-| Searches 502 | `/metrics` `circuits_opened`, logs | NPPES likely down; the breaker fast-fails + auto-recovers. Confirm at npiregistry.cms.hhs.gov. |
+| Searches 502 | `/metrics` `upstream_errors`, logs | NPPES likely down; requests time out and degrade. Confirm at npiregistry.cms.hhs.gov. |
 | `/healthz` 503 | `data_freshness.stale` | An ingest stalled — re-run it (`/admin/ingest` or the CLI); check the cron + Healthchecks.io. |
 | `/readyz` 503 | datastore reachable? | The worker can't reach SQLite/Postgres; the LB pulls it. Check the volume/connection. |
 | A "Confirmed" looks wrong | `docs/provenance.md`, nightly job | Re-run `verify_payers`; if a payer endpoint regressed the round-trip, it's demoted automatically — never serve an unverifiable badge. |

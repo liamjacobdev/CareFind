@@ -38,7 +38,6 @@ def snapshot() -> dict[str, Any]:
         "fhir_cache": {"hits": f_hit, "misses": f_miss, "hit_rate": _rate(f_hit, f_miss)},
         "nppes_cache": {"hits": n_hit, "misses": n_miss, "hit_rate": _rate(n_hit, n_miss)},
         "upstream_errors": d.get("upstream_error", 0),
-        "circuits_opened": d.get("circuit_open", 0),
     }
 
 
