@@ -36,6 +36,10 @@ class FhirPlanNetSource(InsuranceSource):
         self.api_key_header = cfg.get("api_key_header")
         self.api_key = cfg.get("api_key")
         self.npi_system = cfg.get("npi_system", "http://hl7.org/fhir/sid/us-npi")
+        # "chained" (default) = one PractitionerRole?practitioner.identifier call;
+        # "two_step" = resolve Practitioner by NPI then fetch its roles by reference, for
+        # directories that don't support the chained search (e.g. UnitedHealthcare/Optum).
+        self.lookup_mode = cfg.get("lookup_mode", "chained")
         # Regional scoping: a regional payer's directory is only queried for providers in
         # its states. Out-of-state NPIs can't be in-network there, so we return "unknown"
         # (never a fabricated answer) AND avoid hammering a regional endpoint with NPIs it
@@ -125,6 +129,8 @@ class FhirPlanNetSource(InsuranceSource):
         return False  # not in the directory at all
 
     async def _check(self, client: httpx.AsyncClient, npi: str) -> Answer:
+        if self.lookup_mode == "two_step":
+            return await self._check_two_step(client, npi)
         url = f"{self.base}/PractitionerRole"
         params = {"practitioner.identifier": f"{self.npi_system}|{npi}", "_count": "5"}
         try:
@@ -141,6 +147,37 @@ class FhirPlanNetSource(InsuranceSource):
                         self.id, npi, url, type(e).__name__, e)
             return None
         return self._in_network(bundle)
+
+    async def _check_two_step(self, client: httpx.AsyncClient, npi: str) -> Answer:
+        """For directories without the chained practitioner.identifier search: resolve the
+        Practitioner by NPI, then fetch its PractitionerRoles by reference and judge those.
+
+        Trust-preserving: a bogus NPI resolves to no Practitioner -> False (never a yes);
+        the in-network determination still runs `_in_network` over the real roles, so a
+        listed-but-not-network-linked provider is "unknown", never a fabricated yes."""
+        try:
+            pr = await client.get(f"{self.base}/Practitioner", headers=self._headers(),
+                                  params={"identifier": f"{self.npi_system}|{npi}", "_count": "5"})
+            if pr.status_code == 404:
+                return False
+            pr.raise_for_status()
+            prac_ids = [res["id"] for e in (pr.json().get("entry") or [])
+                        if (res := e.get("resource") or {}).get("resourceType") == "Practitioner"
+                        and res.get("id")]
+            if not prac_ids:
+                return False  # NPI is not in this directory at all
+            entries: list[dict[str, Any]] = []
+            for pid in prac_ids[:3]:  # an NPI maps to ~1 practitioner; cap fan-out anyway
+                rb = await client.get(f"{self.base}/PractitionerRole", headers=self._headers(),
+                                      params={"practitioner": f"Practitioner/{pid}", "_count": "10"})
+                rb.raise_for_status()
+                entries.extend(rb.json().get("entry") or [])
+            return self._in_network({"entry": entries})
+        except Exception as e:
+            metrics.incr("upstream_error")
+            log.warning("FHIR Plan-Net 2-step check failed (payer=%s npi=%s): %s: %s",
+                        self.id, npi, type(e).__name__, e)
+            return None
 
     async def check(self, npi: str) -> Answer:
         # Route through the cached batch path so a single lookup is cached too.

@@ -45,22 +45,26 @@ The **validated public endpoints** in `app/planet_registry.py` are wired as *Con
 
 | Payer (scope) | catalog id | Base URL | Round-trip |
 |---|---|---|---|
+| **UnitedHealthcare (national, commercial)** | `unitedhealthcare` | `https://flex.optum.com/fhirpublic/R4` | ✓ bogus→none, listed→active + network-linked (two-step) |
 | **Cigna (national, commercial)** | `cigna` | `https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1` | ✓ bogus→none, listed→active + network-linked |
 | Priority Partners — Johns Hopkins (MD Medicaid) | `priority_partners` | `https://api.jhhpfhir.com/r4/public-pp` | ✓ bogus→none, listed→in-network (Bundle 83,024) |
 | Johns Hopkins Advantage MD (MD Medicare Advantage) | `advantage_md` | `https://api.jhhpfhir.com/r4/public-ma` | ✓ bogus→none, listed→in-network (Bundle 107,487) |
 
-> **Honest finding (the public set is small, but not empty).** **Cigna** publishes a fully
-> public, unauthenticated Da Vinci PDEX Plan-Net directory whose PractitionerRoles carry
-> real network links — it passes the round-trip and is wired as a verified *national*
-> commercial filter. Most other national carriers (UnitedHealthcare, Aetna, Humana) still
-> gate their Plan-Net behind developer registration, or — like the 37 State Medicaid
-> directories in the [CMS SMA-Endpoint-Directory](https://github.com/CMSgov/SMA-Endpoint-Directory)
-> screened here — return a Bundle but **fail the per-NPI round-trip** (no network links, or
-> empty results for listed NPIs), so wiring them would fabricate answers. They stay
-> **estimated**, never verified. Because a live directory call is per-NPI, a verified payer
-> is queried only when you actually filter by it, never on an unfiltered search. The
-> registry + `verify_payers` make growing the set turnkey: an endpoint graduates to
-> *Confirmed* automatically the moment it passes — never by assertion.
+> **Honest finding (the public set is small, but it includes the two biggest insurers).**
+> **UnitedHealthcare** and **Cigna** both publish fully public, unauthenticated Da Vinci
+> PDEX Plan-Net directories whose PractitionerRoles carry real network links — both pass
+> the round-trip and are wired as verified *national* commercial filters. (UHC doesn't
+> support the chained `practitioner.identifier` search, so it uses a **two-step** lookup —
+> resolve the Practitioner by NPI, then its roles — configured per endpoint.) Other carriers
+> like Aetna and Humana gate their Plan-Net behind developer registration or respond too
+> slowly to use; and the 37 State Medicaid directories in the
+> [CMS SMA-Endpoint-Directory](https://github.com/CMSgov/SMA-Endpoint-Directory) screened
+> here return a Bundle but **fail the per-NPI round-trip** (no network links, or empty
+> results for listed NPIs), so wiring them would fabricate answers. They stay **estimated**,
+> never verified. Because a live directory call is per-NPI, a verified payer is queried only
+> when you actually filter by it, never on an unfiltered search. The registry +
+> `verify_payers` make growing the set turnkey: an endpoint graduates to *Confirmed*
+> automatically the moment it passes — never by assertion.
 
 ### Source 3 — Transparency-in-Coverage (verified commercial, by ingest)
 Every commercial plan must publish machine-readable in-network files. Ingest a payer's in-network NPIs and that payer becomes a **verified** filter — a *Confirmed* badge that supersedes its estimated catalog entry. The payer id must match a catalog entry (`app/catalog.py`), e.g. `aetna`, `cigna`, `unitedhealthcare`:

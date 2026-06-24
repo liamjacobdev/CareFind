@@ -53,6 +53,11 @@ class PlanNetEndpoint:
     bundle_total: int | None = None   # PractitionerRole Bundle.total at last check
     last_checked: str | None = None   # ISO date of the last successful validation
     npi_system: str = _NPI_SYSTEM
+    # How to resolve a provider's roles. "chained" (default): one
+    # PractitionerRole?practitioner.identifier=... call. "two_step": resolve the
+    # Practitioner by NPI, then fetch its PractitionerRoles by reference — for
+    # directories (e.g. UnitedHealthcare/Optum) that don't support the chained search.
+    lookup_mode: str = "chained"
     note: str = ""
 
     def payer_config(self) -> dict[str, Any]:
@@ -66,6 +71,7 @@ class PlanNetEndpoint:
             "npi_system": self.npi_system,
             "states": self.states,
             "verify_url": self.base_url,
+            "lookup_mode": self.lookup_mode,
         }
 
 
@@ -98,6 +104,19 @@ REGISTRY: list[PlanNetEndpoint] = [
              "PractitionerRoles carry network-reference extensions to Cigna Network "
              "Organizations. NPI round-trip verified (bogus NPI -> empty; a listed NPI -> "
              "active, network-linked role).",
+    ),
+    # Largest US insurer. Public Optum-hosted Plan-Net; roles are network-linked but the
+    # directory does NOT support the chained practitioner.identifier search, so it needs
+    # two_step (resolve Practitioner by NPI, then its roles). Graduates the catalog's
+    # `unitedhealthcare` estimate to Confirmed.
+    PlanNetEndpoint(
+        id="unitedhealthcare", label="UnitedHealthcare",
+        base_url="https://flex.optum.com/fhirpublic/R4", category="commercial",
+        states=None, status="validated", last_checked="2026-06-23", lookup_mode="two_step",
+        note="National commercial (Optum-hosted public Plan-Net). PractitionerRoles carry "
+             "network-reference extensions; requires two_step lookup (no chained "
+             "practitioner.identifier search). NPI round-trip verified (bogus NPI -> no "
+             "Practitioner -> not in-network; a listed NPI -> active, network-linked role).",
     ),
 
     # ── Tracked but NOT wired — each fails the per-NPI usability bar for a documented

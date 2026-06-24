@@ -69,6 +69,26 @@ def _discover_npi(client: httpx.Client, base: str, npi_system: str) -> str | Non
     return None
 
 
+def _roles_for_npi(client: httpx.Client, base: str, system: str, npi: str,
+                   lookup_mode: str) -> dict[str, Any]:
+    """The PractitionerRole bundle for one NPI, honoring the endpoint's lookup mode.
+    "two_step" resolves the Practitioner by NPI then fetches its roles by reference — for
+    directories (e.g. UnitedHealthcare/Optum) that don't support the chained search."""
+    if lookup_mode == "two_step":
+        p = _query(client, base, "Practitioner", identifier=f"{system}|{npi}", _count="5")
+        prac_ids = [res["id"] for ent in (p.get("entry") or [])
+                    if (res := ent.get("resource") or {}).get("resourceType") == "Practitioner"
+                    and res.get("id")]
+        entries: list[dict[str, Any]] = []
+        for pid in prac_ids[:3]:
+            rb = _query(client, base, "PractitionerRole",
+                        practitioner=f"Practitioner/{pid}", _count="10")
+            entries.extend(rb.get("entry") or [])
+        return {"entry": entries}
+    return _query(client, base, "PractitionerRole",
+                  **{"practitioner.identifier": f"{system}|{npi}", "_count": "5"})
+
+
 def probe(client: httpx.Client, e: PlanNetEndpoint) -> dict[str, Any]:
     """Run the full per-NPI round-trip. Returns {status, total, error}."""
     base = e.base_url.rstrip("/")
@@ -85,8 +105,7 @@ def probe(client: httpx.Client, e: PlanNetEndpoint) -> dict[str, Any]:
         total = int(total) if isinstance(total, int) else None
 
         # 2) bogus NPI must NOT be judged in-network (else the filter is ignored).
-        bogus = _query(client, base, "PractitionerRole",
-                       **{"practitioner.identifier": f"{e.npi_system}|{_BOGUS_NPI}", "_count": "5"})
+        bogus = _roles_for_npi(client, base, e.npi_system, _BOGUS_NPI, e.lookup_mode)
         if FhirPlanNetSource._in_network(bogus) is True:
             return {"status": "unusable", "total": total,
                     "error": "ignores the NPI filter (a bogus NPI resolves in-network)"}
@@ -96,8 +115,7 @@ def probe(client: httpx.Client, e: PlanNetEndpoint) -> dict[str, Any]:
         if not npi:
             return {"status": "unusable", "total": total,
                     "error": "could not discover a listed NPI to round-trip"}
-        real = _query(client, base, "PractitionerRole",
-                      **{"practitioner.identifier": f"{e.npi_system}|{npi}", "_count": "5"})
+        real = _roles_for_npi(client, base, e.npi_system, npi, e.lookup_mode)
         verdict = FhirPlanNetSource._in_network(real)
         if verdict is not True:
             return {"status": "unusable", "total": total,

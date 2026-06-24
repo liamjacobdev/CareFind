@@ -202,6 +202,39 @@ async def test_verified_fhir_carries_per_npi_provenance(temp_db, monkeypatch):
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_two_step_lookup_resolves_practitioner_then_roles(temp_db, monkeypatch):
+    """For a directory that doesn't support the chained practitioner.identifier search
+    (lookup_mode='two_step', e.g. UnitedHealthcare/Optum): resolve the Practitioner by
+    NPI, then its roles. A listed NPI -> in-network; a bogus NPI (no Practitioner) ->
+    False, never a fabricated yes."""
+    base = "https://optum.example/R4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [
+        {"id": "unitedhealthcare", "label": "UHC", "base_url": base, "lookup_mode": "two_step"}])
+
+    def practitioner_resp(request: httpx.Request) -> httpx.Response:
+        ident = request.url.params.get("identifier", "")
+        if ident.endswith("|1111111111"):
+            return httpx.Response(200, json={"entry": [
+                {"resource": {"resourceType": "Practitioner", "id": "P1"}}]})
+        return httpx.Response(200, json={"entry": []})  # bogus -> no Practitioner
+
+    prac = respx.get(f"{base}/Practitioner").mock(side_effect=practitioner_resp)
+    roles = respx.get(f"{base}/PractitionerRole").mock(
+        return_value=httpx.Response(200, json=_IN_NETWORK))
+    reg = Registry()
+    reg.build()
+
+    real = await reg.annotate([{"npi": "1111111111", "stateAb": "NY"}], only=["unitedhealthcare"])
+    assert real["1111111111"]["unitedhealthcare"]["value"] is True
+    assert real["1111111111"]["unitedhealthcare"]["confidence"] == "verified"
+
+    bogus = await reg.annotate([{"npi": "0000000000", "stateAb": "NY"}], only=["unitedhealthcare"])
+    assert bogus["0000000000"]["unitedhealthcare"]["value"] is False  # no Practitioner -> not in-network
+    assert prac.called and roles.called
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_network_source_queried_only_on_demand(temp_db, monkeypatch):
     """A live FHIR Plan-Net source costs a per-NPI directory call, so it must NOT fire on
     an unfiltered search (only=None) — only when its plan is explicitly requested.
