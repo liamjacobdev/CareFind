@@ -7,6 +7,19 @@ carefind.db
 carefind.db-wal
 carefind.db-shm
 
+# Node/JS toolchain — the frontend bundle (carefind.bundle.js) is prebuilt + committed,
+# so Vercel must NOT see package.json (it would detect a Node project, run npm, and expect
+# a static output directory — and fail). Keep carefind.config.js: it's served at runtime.
+package.json
+package-lock.json
+build.mjs
+eslint.config.js
+vitest.config.js
+playwright.config.js
+jsconfig.json
+.prettierrc
+.prettierignore
+
 # Dev-only / not needed at serve time.
 .venv/
 __pycache__/
