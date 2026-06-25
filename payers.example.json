@@ -20,7 +20,7 @@
       "lookup_mode": "two_step",
       "auth": "oauth2",
       "token_url": "https://apif1.aetna.com/fhir/v1/fhirserver_auth/oauth2/token",
-      "scope": "",
+      "scope": "Public NonPII",
       "client_id_env": "AETNA_CLIENT_ID",
       "client_secret_env": "AETNA_CLIENT_SECRET",
       "npi_system": "http://hl7.org/fhir/sid/us-npi"
