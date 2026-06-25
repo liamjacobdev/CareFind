@@ -28,8 +28,10 @@ docker compose up -d        # uvicorn (1 worker) behind Caddy (auto Let's Encryp
 Set env: `ALLOWED_ORIGINS`, `CAREFIND_TRUST_PROXY=true`, `CAREFIND_ADMIN_TOKEN`,
 `CAREFIND_UA=you@email`, and (for the cron) `CAREFIND_MEDICARE_INGEST_URL`.
 
-> **Concrete $0 path:** [docs/deploy.md](deploy.md) is a turnkey, free deployment guide
-> (Oracle Cloud Always Free VM + DuckDNS subdomain) with a one-shot `deploy/setup.sh`.
+> **Concrete $0 path:** [docs/deploy.md](deploy.md) leads with a **cardless, free Vercel**
+> deploy (one serverless function serves page + API; the Medicare index ships as a gzipped
+> SQLite seed inflated to /tmp). The Docker/compose path here is the self-host alternative
+> (durable persistence, no cold starts) — `deploy/setup.sh` automates it for a VM + DuckDNS.
 > A single worker is deliberate — the Nominatim throttle + in-process rate limiter are
 > per-process (see the Dockerfile note); scale by fronting a shared cache, not workers.
 

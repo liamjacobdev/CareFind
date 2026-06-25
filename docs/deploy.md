@@ -1,100 +1,89 @@
-# Deploy CareFind for $0 (Oracle Cloud Always Free + DuckDNS)
+# Deploy CareFind for $0 — cardless, on Vercel
 
-This is the concrete, free deployment path. It runs the **shipped** `docker-compose.yml`
-+ `Caddyfile` unchanged, with a persistent disk for the 2.5M-row Medicare index and a
-real Let's Encrypt TLS certificate — all at $0/month.
+This is the **cardless, free** deployment path: CareFind runs as a single Vercel Python
+serverless function that serves both the page and the API (same origin → no CORS), with
+the 2.5M-row Medicare index shipped as a gzipped SQLite seed in the deployment. No credit
+card, no database service, no separate frontend host.
 
-## Why this stack (first principles)
+## Why this works (first principles)
 
-CareFind's one hard hosting constraint is the **Medicare SQLite index (~2.5M rows) that
-must persist across restarts**. The usual "free tier" PaaS options (Render/Koyeb/HF
-Spaces free) have **ephemeral disks and sleep on idle** — every cold start wipes the DB
-and forces a full re-ingest of the CMS quarterly file, so searches show 0 Medicare until
-it finishes. That makes them unusable for this app. A small always-on VM with a real disk
-is the only $0 option that runs the shipped artifacts as-is.
+Vercel functions have a **read-only bundle filesystem** and an **ephemeral, writable
+`/tmp`**. CareFind's data path — Medicare/TiC acceptance lookups — is **read-only at serve
+time**, so we don't need a managed database at all:
 
-- **Host — Oracle Cloud "Always Free" VM.** A genuinely free-forever VM with persistent
-  block storage (1 GB RAM AMD micro is plenty; the ARM Ampere shape is generous if
-  available). A credit card is required **for identity verification only** — Always Free
-  shapes never bill. This is the only owner step that needs a human.
-- **DNS — DuckDNS** (or any free dynamic-DNS). A free `*.duckdns.org` subdomain → an A
-  record at the VM's public IP, so Caddy fetches a real Let's Encrypt cert on first boot.
-  No card, no domain purchase.
+- The seed `carefind.db.gz` (~27 MB) ships in the deployment; `api/index.py` inflates it
+  to `/tmp/carefind.db` once per cold start (~98 MB, well under `/tmp`'s 512 MB).
+- The few cache writes (FHIR/geocode) then land in that writable `/tmp` copy — ephemeral
+  per instance, which is fine (they're best-effort and re-derivable).
+- Geocoding uses the **keyless US Census geocoder** (no API key, no rate limit), so the
+  per-process Nominatim throttle isn't needed.
+- The per-process rate limiter is disabled (`RATE_LIMIT_MAX=0`) — it's meaningless across
+  isolated serverless instances; rely on Vercel's platform protections.
 
-> Cardless fallback (inferior, documented for honesty): if you cannot do the card
-> verification, a free PaaS will run the *web app*, but you must accept that the Medicare
-> index won't persist — you'd re-ingest on every cold start (set `CAREFIND_MEDICARE_INGEST_URL`
-> and trigger `/admin/ingest` after each wake). Don't choose this unless Oracle is truly
-> impossible; the data UX is poor.
+Total function size (~27 MB seed + Python deps) sits comfortably under Vercel's ~250 MB
+limit. Everything is verified locally via the cold-start simulation in the repo history.
 
----
+## Deploy (cardless, ~5 minutes)
 
-## Owner steps (the only parts that need a human)
+1. **Create a free Vercel account** at https://vercel.com (GitHub login; no card for the
+   Hobby plan).
+2. **Push this repo to GitHub** (the `carefind.db.gz` seed is committed, so the deploy is
+   self-contained). On Vercel: **Add New → Project → import the repo**. Vercel detects
+   `vercel.json` + `api/index.py` and the Python runtime automatically; click Deploy.
+3. **Point the page at its own origin** so API calls resolve. Your production URL is
+   `https://<project-name>.vercel.app`. Run once and redeploy (push):
+   ```bash
+   python configure_frontend.py https://<project-name>.vercel.app
+   # rewrites carefind.config.js (apiBase) + the HTML CSP connect-src to your origin
+   git commit -am "config: point frontend at the Vercel origin" && git push
+   ```
+4. (Optional) In the Vercel project's **Settings → Environment Variables**, set
+   `CAREFIND_UA` to a real contact email (identifies you to NPPES; only required if you
+   later enable the optional Nominatim geocoder fallback).
 
-1. **Create the Oracle Cloud account** → https://www.oracle.com/cloud/free/ (card for ID
-   verification; pick an Always Free region).
-2. **Launch an Always Free VM**: Ubuntu 22.04/24.04, an Always-Free-eligible shape
-   (`VM.Standard.E2.1.Micro`, or `VM.Standard.A1.Flex` 1 OCPU/6 GB if offered). Add your
-   SSH key. Note the **public IP**.
-3. **Open ports 80 and 443**: in the VCN's default Security List add ingress rules for TCP
-   80 and 443 from `0.0.0.0/0`. (Oracle's default only opens 22.)
-4. **Get a free subdomain**: sign in at https://www.duckdns.org with GitHub/Google, create
-   e.g. `carefind`, copy the **token**. Point it at the VM IP (the setup script below does
-   this for you, or set the IP in the DuckDNS UI).
-
-Then hand me the **public IP**, the **subdomain** (`carefind.duckdns.org`), and the
-**DuckDNS token** and I'll finalize the config — or just run the steps below yourself.
-
----
-
-## Bring it up (run on the VM)
-
-```bash
-# 0) Docker (Ubuntu)
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker $USER && newgrp docker
-
-# 1) Get the code
-git clone <your-fork-url> carefind && cd carefind
-
-# 2) One-shot configure + launch (see deploy/setup.sh)
-DUCKDNS_NAME=carefind \
-DUCKDNS_TOKEN=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx \
-CONTACT_EMAIL=you@example.com \
-ADMIN_TOKEN="$(openssl rand -hex 32)" \
-bash deploy/setup.sh
-```
-
-`deploy/setup.sh` (idempotent) does the mechanical work:
-- points the DuckDNS A record at this VM's public IP;
-- writes `.env` (real `ALLOWED_ORIGINS`, `CAREFIND_UA`, `CAREFIND_ADMIN_TOKEN`, proxy trust);
-- runs `configure_frontend.py https://<subdomain>.duckdns.org` (apiBase + CSP);
-- sets the Caddy site address to your subdomain;
-- `docker compose up -d --build`.
-
-## Seed the data (once; then the cron keeps it fresh)
-
-```bash
-# Medicare quarterly enrollment file (real, nationwide ~2.5M NPIs). Find the current
-# quarter's CSV URL at data.cms.gov (Medicare Fee-For-Service Public Provider Enrollment).
-docker compose exec api python -m app.ingest_medicare "<CMS-quarterly-csv-url>"
-docker compose exec api python -m app.verify_payers   # validate Plan-Net + write the ledger
-```
-
-For unattended freshness, set the GitHub Actions secrets the
-[ingest cron](../.github/workflows/ingest.yml) needs: `CAREFIND_URL=https://<subdomain>.duckdns.org`,
-`CAREFIND_ADMIN_TOKEN` (same value as above), and `HEALTHCHECK_PING_URL` (free
-Healthchecks.io dead-man's switch).
+That's it. The same function serves `/`, the JS bundle, and `/api/*`.
 
 ## Verify it's live
 
 ```bash
-curl -s https://<subdomain>.duckdns.org/readyz          # -> 200
-curl -s https://<subdomain>.duckdns.org/healthz         # -> 200 (503 = data stale, re-ingest)
-curl -s https://<subdomain>.duckdns.org/api/insurance/plans | python3 -c \
+curl -s https://<project-name>.vercel.app/readyz     # -> 200
+curl -s https://<project-name>.vercel.app/healthz    # -> 200 (503 = data stale)
+curl -s https://<project-name>.vercel.app/api/insurance/plans | python3 -c \
   "import sys,json;print(sorted(p['id'] for p in json.load(sys.stdin)['plans'] if p['confidence']=='verified'))"
 # expect: ['cigna','humana','medicare','priority_partners','unitedhealthcare']
 ```
 
-Point a free uptime monitor (UptimeRobot) at `/healthz` — it returns 503 on stale data,
-which is the signal that an ingest was missed.
+## Refreshing the data (quarterly Medicare, monthly TiC)
+
+The seed is a point-in-time snapshot. To refresh, rebuild it locally and redeploy:
+
+```bash
+python -m app.ingest_medicare "<CMS-quarterly-csv-url>"   # updates ./carefind.db
+python -m app.verify_payers                               # re-validate payers + ledger
+gzip -9 -c carefind.db > carefind.db.gz                   # rebuild the seed
+git commit -am "data: refresh Medicare seed" && git push  # Vercel auto-redeploys
+```
+
+This can be automated with a scheduled GitHub Action (ingest → gzip → commit), which then
+triggers a Vercel deploy on push. Not wired by default to keep the repo's git history
+free of large recurring binaries unless you want it.
+
+## Known trade-offs (honest)
+
+- **Cold starts** re-inflate the seed (~1 s) and rebuild the registry; first hit after idle
+  is slower. Vercel keeps warm instances under traffic.
+- **No durable write persistence** — the FHIR/geocode caches reset per instance/cold start.
+  The valuable data (Medicare/TiC) is read-only and always present from the seed.
+- **First payer-filtered search** makes live FHIR calls per NPI (bounded, concurrent,
+  cached for the instance's life); an unfiltered search makes zero and is fast.
+
+---
+
+## Alternative: self-host the container (needs a host, not cardless-PaaS)
+
+For a long-running, fully-persistent deployment, the repo also ships `Dockerfile` +
+`docker-compose.yml` + `Caddyfile` (uvicorn 1 worker behind Caddy with auto Let's
+Encrypt, persistent volume for the SQLite index). Run `python configure_frontend.py
+https://your.domain`, set `.env` (see `.env.example`), and `docker compose up -d`. This
+needs a VM/host with a disk and a domain — see the runbook. It is the right choice if you
+want durable write-persistence and no cold starts, but it isn't a cardless free PaaS.

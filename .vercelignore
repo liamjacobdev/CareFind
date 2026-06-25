@@ -1,0 +1,23 @@
+# Keep the Vercel deployment lean and under the function size limit. The runtime needs
+# only: app/ (traced from the import), the carefind* static assets + carefind.db.gz seed
+# (pulled in via vercel.json includeFiles), and requirements.txt.
+
+# The uncompressed 98 MB DB — the function inflates carefind.db.gz to /tmp instead.
+carefind.db
+carefind.db-wal
+carefind.db-shm
+
+# Dev-only / not needed at serve time.
+.venv/
+__pycache__/
+node_modules/
+tests/
+tests-e2e/
+src/
+docs/
+deploy/
+loadtest/
+sample_medicare.csv
+*.bat
+.github/
+.git/
