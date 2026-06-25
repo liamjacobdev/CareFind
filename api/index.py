@@ -31,6 +31,9 @@ if not os.path.exists(_RUNTIME) and _SEED.exists():
 os.environ["CAREFIND_DB"] = _RUNTIME
 os.environ.setdefault("GEOCODE_USE_CENSUS", "true")   # keyless, no rate limit
 os.environ.setdefault("RATE_LIMIT_MAX", "0")          # per-process limiter is moot here
+# One process serves page + API → point the page at its own origin automatically, so the
+# first deploy works with no configure_frontend step.
+os.environ.setdefault("CAREFIND_SAME_ORIGIN", "true")
 os.environ.setdefault(
     "CAREFIND_UA",
     "CareFind/3.1 (+https://github.com/; set CAREFIND_UA to your contact email)",

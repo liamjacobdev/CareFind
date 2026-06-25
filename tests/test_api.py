@@ -108,6 +108,25 @@ def test_config_load_payers_tolerates_malformed_file(tmp_path, monkeypatch):
     assert main.settings.load_payers() == []
 
 
+def test_config_js_static_by_default(client):
+    """Default: config.js is served verbatim (a separately-hosted frontend keeps its
+    configure_frontend-baked apiBase)."""
+    r = client.get("/carefind.config.js")
+    assert r.status_code == 200
+    assert "apiBase: 'http://localhost:8000'" in r.text  # the shipped default, untouched
+
+
+def test_config_js_same_origin_rewrites_apibase(client, monkeypatch):
+    """With CAREFIND_SAME_ORIGIN (the Vercel deploy), apiBase is rewritten to the
+    request's own origin so the first deploy works with no configure_frontend step."""
+    monkeypatch.setattr(main.settings, "same_origin_frontend", True)
+    r = client.get("/carefind.config.js", headers={
+        "x-forwarded-proto": "https", "x-forwarded-host": "carefind.vercel.app"})
+    assert r.status_code == 200
+    assert "apiBase: 'https://carefind.vercel.app'" in r.text
+    assert "localhost:8000" not in r.text
+
+
 @pytest.mark.asyncio
 async def test_geocode_degrades_to_no_coords_when_chain_down(temp_db, monkeypatch):
     """When the geocoder chain is down, geocoding degrades to None — never a

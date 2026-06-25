@@ -127,6 +127,15 @@ class Settings:
             "CAREFIND_USE_PLANET_REGISTRY", "true"
         ).strip().lower() in ("1", "true", "yes", "on")
 
+        # When the same process serves BOTH the page and the API (e.g. the Vercel
+        # serverless deploy), serve carefind.config.js with apiBase rewritten to the
+        # request's own origin — so a fresh deploy works on first load with no
+        # configure_frontend step. Off by default (a separately-hosted frontend keeps the
+        # apiBase baked by configure_frontend.py).
+        self.same_origin_frontend = os.environ.get(
+            "CAREFIND_SAME_ORIGIN", "false"
+        ).strip().lower() in ("1", "true", "yes", "on")
+
         # Data-age SLOs (C3). A source whose last ingest is older than its budget is
         # "stale" and flips /healthz to 503 — a dead-man's-switch for a stalled ingest.
         # Medicare refreshes quarterly (~92d; allow slack); TiC payers monthly.

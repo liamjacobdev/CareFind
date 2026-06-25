@@ -1,10 +1,13 @@
 """Static-asset routes (split from main.py): the page, the built bundle + injected
 config, the shared pure logic, and the app icon. Each is served with an ETag + short
 Cache-Control (304 on a matching If-None-Match)."""
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
+
+from .config import settings
 
 router = APIRouter()
 
@@ -40,9 +43,29 @@ def index(request: Request) -> Response:
                         "Frontend (carefind.html) not found next to the app package.")
 
 
+def _request_origin(request: Request) -> str:
+    """The page's own origin, honoring the reverse proxy (Vercel/Caddy) that terminates
+    TLS: trust X-Forwarded-Proto/Host, else fall back to the request URL."""
+    proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip() \
+        or request.url.scheme or "https"
+    host = request.headers.get("x-forwarded-host", "").split(",")[0].strip() \
+        or request.headers.get("host", "").strip() or request.url.netloc
+    return f"{proto}://{host}" if host else ""
+
+
 @router.get("/carefind.config.js")
 def frontend_config(request: Request) -> Response:
     # Deployment config (data only), external so the page has no inline script (D3).
+    # When the same process serves page + API (CAREFIND_SAME_ORIGIN, e.g. on Vercel),
+    # rewrite apiBase to the request's own origin so a fresh deploy works on first load
+    # with no configure_frontend step. CSP 'self' already covers same-origin API calls.
+    if settings.same_origin_frontend and _FRONTEND_CONFIG.exists():
+        origin = _request_origin(request)
+        if origin:
+            body = _FRONTEND_CONFIG.read_text(encoding="utf-8")
+            body = re.sub(r"apiBase:\s*'[^']*'", f"apiBase: '{origin}'", body, count=1)
+            return Response(body, media_type="application/javascript",
+                            headers={"Cache-Control": "no-store"})
     return _static_file(request, _FRONTEND_CONFIG, "application/javascript",
                         "carefind.config.js not found next to the app package.")
 

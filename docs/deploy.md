@@ -30,18 +30,14 @@ limit. Everything is verified locally via the cold-start simulation in the repo 
 2. **Push this repo to GitHub** (the `carefind.db.gz` seed is committed, so the deploy is
    self-contained). On Vercel: **Add New → Project → import the repo**. Vercel detects
    `vercel.json` + `api/index.py` and the Python runtime automatically; click Deploy.
-3. **Point the page at its own origin** so API calls resolve. Your production URL is
-   `https://<project-name>.vercel.app`. Run once and redeploy (push):
-   ```bash
-   python configure_frontend.py https://<project-name>.vercel.app
-   # rewrites carefind.config.js (apiBase) + the HTML CSP connect-src to your origin
-   git commit -am "config: point frontend at the Vercel origin" && git push
-   ```
-4. (Optional) In the Vercel project's **Settings → Environment Variables**, set
+3. (Optional) In the Vercel project's **Settings → Environment Variables**, set
    `CAREFIND_UA` to a real contact email (identifies you to NPPES; only required if you
    later enable the optional Nominatim geocoder fallback).
 
-That's it. The same function serves `/`, the JS bundle, and `/api/*`.
+That's it — **no configure step**. The same function serves `/`, the JS bundle, and
+`/api/*`, and (via `CAREFIND_SAME_ORIGIN`, set in `api/index.py`) it points the page at
+its own origin automatically, so the first deploy works on first load. A custom domain
+added later in Vercel just works — the origin is detected per request.
 
 ## Verify it's live
 
