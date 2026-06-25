@@ -10,6 +10,7 @@ import httpx
 
 from . import db, metrics
 from .config import settings
+from .oauth import ClientCredentials
 from .sources import (
     _FHIR_STR_TO_VALUE,
     _FHIR_VALUE_TO_STR,
@@ -35,6 +36,9 @@ class FhirPlanNetSource(InsuranceSource):
         self.base = cfg["base_url"].rstrip("/")
         self.api_key_header = cfg.get("api_key_header")
         self.api_key = cfg.get("api_key")
+        # OAuth 2.0 client-credentials (for OAuth-gated payers, e.g. Aetna/Anthem). None
+        # for open or static-key endpoints. Secrets come from cfg or the named env vars.
+        self.oauth = ClientCredentials.from_config(cfg)
         self.npi_system = cfg.get("npi_system", "http://hl7.org/fhir/sid/us-npi")
         # "chained" (default) = one PractitionerRole?practitioner.identifier call;
         # "two_step" = resolve Practitioner by NPI then fetch its roles by reference, for
@@ -68,6 +72,17 @@ class FhirPlanNetSource(InsuranceSource):
         h = {"Accept": "application/fhir+json", "User-Agent": settings.contact_ua}
         if self.api_key_header and self.api_key:
             h[self.api_key_header] = self.api_key
+        return h
+
+    async def _auth_headers(self, client: httpx.AsyncClient) -> dict[str, str]:
+        """Base headers plus, for an OAuth-gated payer, a Bearer token (cached). A token
+        fetch failure leaves the Authorization header off → the request 401s → the source
+        degrades to 'unknown', never a fabricated answer."""
+        h = self._headers()
+        if self.oauth is not None:
+            tok = await self.oauth.token_async(client)
+            if tok:
+                h["Authorization"] = f"Bearer {tok}"
         return h
 
     @staticmethod
@@ -134,7 +149,7 @@ class FhirPlanNetSource(InsuranceSource):
         url = f"{self.base}/PractitionerRole"
         params = {"practitioner.identifier": f"{self.npi_system}|{npi}", "_count": "5"}
         try:
-            r = await client.get(url, params=params, headers=self._headers())
+            r = await client.get(url, params=params, headers=await self._auth_headers(client))
             if r.status_code == 404:
                 return False
             r.raise_for_status()
@@ -156,7 +171,8 @@ class FhirPlanNetSource(InsuranceSource):
         the in-network determination still runs `_in_network` over the real roles, so a
         listed-but-not-network-linked provider is "unknown", never a fabricated yes."""
         try:
-            pr = await client.get(f"{self.base}/Practitioner", headers=self._headers(),
+            headers = await self._auth_headers(client)
+            pr = await client.get(f"{self.base}/Practitioner", headers=headers,
                                   params={"identifier": f"{self.npi_system}|{npi}", "_count": "5"})
             if pr.status_code == 404:
                 return False
@@ -168,7 +184,7 @@ class FhirPlanNetSource(InsuranceSource):
                 return False  # NPI is not in this directory at all
             entries: list[dict[str, Any]] = []
             for pid in prac_ids[:3]:  # an NPI maps to ~1 practitioner; cap fan-out anyway
-                rb = await client.get(f"{self.base}/PractitionerRole", headers=self._headers(),
+                rb = await client.get(f"{self.base}/PractitionerRole", headers=headers,
                                       params={"practitioner": f"Practitioner/{pid}", "_count": "10"})
                 rb.raise_for_status()
                 entries.extend(rb.json().get("entry") or [])

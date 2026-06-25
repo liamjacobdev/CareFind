@@ -179,6 +179,63 @@ def test_stream_rejects_declared_content_length_over_cap(monkeypatch):
 
 
 @respx.mock
+def test_oauth_client_credentials_token_caches_and_sends_basic_auth():
+    from app.oauth import ClientCredentials
+    route = respx.post("https://idp.example/token").mock(
+        return_value=httpx.Response(200, json={"access_token": "TOK1", "expires_in": 3600}))
+    cc = ClientCredentials("https://idp.example/token", "cid", "secret", scope="provider")
+    with httpx.Client() as c:
+        assert cc.token_sync(c) == "TOK1"
+        assert cc.token_sync(c) == "TOK1"          # cached -> no second POST
+    assert route.call_count == 1
+    sent = route.calls[0].request
+    import base64
+    assert sent.headers["Authorization"] == "Basic " + base64.b64encode(b"cid:secret").decode()
+    assert b"grant_type=client_credentials" in sent.content and b"scope=provider" in sent.content
+
+
+@respx.mock
+def test_verify_payers_probe_validates_oauth_gated_endpoint(monkeypatch):
+    """An OAuth-gated payer (e.g. Aetna): the validator fetches a token, attaches the
+    Bearer, and round-trips by NPI via two_step — exactly the wiring Aetna needs."""
+    from app.planet_registry import PlanNetEndpoint
+    monkeypatch.setenv("AETNA_ID", "cid")
+    monkeypatch.setenv("AETNA_SECRET", "sec")
+    base = "https://gated.example/v1/providerdirectorydata"
+    respx.post("https://idp.example/token").mock(
+        return_value=httpx.Response(200, json={"access_token": "BEARER123", "expires_in": 3600}))
+
+    def needs_bearer(request, ok_body):
+        if request.headers.get("Authorization") != "Bearer BEARER123":
+            return httpx.Response(401, json={"resourceType": "OperationOutcome"})
+        return httpx.Response(200, json=ok_body)
+
+    # head check + Practitioner discovery + two_step
+    respx.get(f"{base}/PractitionerRole").mock(side_effect=lambda r: needs_bearer(r, {
+        "resourceType": "Bundle", "total": 7, "entry": [
+            {"resource": {"resourceType": "PractitionerRole", "active": True,
+                          "network": [{"reference": "Network/aetna"}]}}]}))
+
+    def practitioner(request):
+        ident = request.url.params.get("identifier", "")
+        listed = (not ident) or ident.endswith("|1111111111")
+        body = {"resourceType": "Bundle", "entry": (
+            [{"resource": {"resourceType": "Practitioner", "id": "p1",
+                           "identifier": [{"system": "http://hl7.org/fhir/sid/us-npi",
+                                           "value": "1111111111"}]}}] if listed else [])}
+        return needs_bearer(request, body)
+
+    respx.get(f"{base}/Practitioner").mock(side_effect=practitioner)
+
+    ep = PlanNetEndpoint(
+        id="aetna", label="Aetna", base_url=base, category="commercial", states=None,
+        lookup_mode="two_step", auth="oauth2", token_url="https://idp.example/token",
+        client_id_env="AETNA_ID", client_secret_env="AETNA_SECRET")
+    with httpx.Client() as c:
+        assert verify_payers.probe(c, ep)["status"] == "validated"
+
+
+@respx.mock
 def test_latest_medicare_csv_url_resolves_from_catalog():
     """The seed-refresh Action discovers the current quarterly CSV from data.cms.gov."""
     csv_url = "https://data.cms.gov/sites/default/files/2026-05/abc/PPEF_Enrollment_Extract_2026.04.01.csv"

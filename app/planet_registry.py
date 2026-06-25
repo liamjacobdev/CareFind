@@ -58,11 +58,19 @@ class PlanNetEndpoint:
     # Practitioner by NPI, then fetch its PractitionerRoles by reference — for
     # directories (e.g. UnitedHealthcare/Optum) that don't support the chained search.
     lookup_mode: str = "chained"
+    # OAuth 2.0 client-credentials for OAuth-gated payers (e.g. Aetna). Secrets are read
+    # from the named env vars at runtime — never stored here. Leave auth="" for open or
+    # static-key endpoints.
+    auth: str = ""
+    token_url: str = ""
+    scope: str = ""
+    client_id_env: str = ""
+    client_secret_env: str = ""
     note: str = ""
 
     def payer_config(self) -> dict[str, Any]:
         """The payers.json-shaped config FhirPlanNetSource consumes."""
-        return {
+        cfg: dict[str, Any] = {
             "id": self.id,
             "label": self.label,
             "payer": self.id,
@@ -73,6 +81,11 @@ class PlanNetEndpoint:
             "verify_url": self.base_url,
             "lookup_mode": self.lookup_mode,
         }
+        if self.auth:
+            cfg.update(auth=self.auth, token_url=self.token_url, scope=self.scope,
+                       client_id_env=self.client_id_env,
+                       client_secret_env=self.client_secret_env)
+        return cfg
 
 
 # ── The curated registry ──────────────────────────────────────────────────────

@@ -33,6 +33,7 @@ import httpx
 from . import planet_registry
 from .config import settings
 from .insurance import FhirPlanNetSource
+from .oauth import ClientCredentials
 from .planet_registry import PlanNetEndpoint
 
 _LEDGER_PATH = Path(__file__).resolve().parent.parent / "docs" / "provenance.md"
@@ -44,22 +45,36 @@ def _headers() -> dict[str, str]:
     return {"Accept": "application/fhir+json", "User-Agent": settings.contact_ua}
 
 
+def _endpoint_headers(client: httpx.Client, e: PlanNetEndpoint) -> dict[str, str]:
+    """Base headers plus a Bearer token for an OAuth-gated endpoint (e.g. Aetna). For
+    open/static-key endpoints this is just the base headers."""
+    headers = _headers()
+    cc = ClientCredentials.from_config(e.payer_config())
+    if cc is not None:
+        tok = cc.token_sync(client)
+        if tok:
+            headers["Authorization"] = f"Bearer {tok}"
+    return headers
+
+
 def _roles(bundle: dict[str, Any]) -> list[dict[str, Any]]:
     return [e.get("resource", {}) for e in (bundle.get("entry") or [])
             if (e.get("resource") or {}).get("resourceType") == "PractitionerRole"]
 
 
-def _query(client: httpx.Client, base: str, resource: str, **params: str) -> dict[str, Any]:
-    r = client.get(f"{base}/{resource}", params=params, headers=_headers(),
+def _query(client: httpx.Client, base: str, resource: str, headers: dict[str, str],
+           **params: str) -> dict[str, Any]:
+    r = client.get(f"{base}/{resource}", params=params, headers=headers,
                    timeout=_TIMEOUT, follow_redirects=True)
     r.raise_for_status()
     data = r.json()
     return data if isinstance(data, dict) else {}
 
 
-def _discover_npi(client: httpx.Client, base: str, npi_system: str) -> str | None:
+def _discover_npi(client: httpx.Client, base: str, npi_system: str,
+                  headers: dict[str, str]) -> str | None:
     """Pull a real, listed NPI from the directory's own /Practitioner page, to round-trip."""
-    data = _query(client, base, "Practitioner", _count="10")
+    data = _query(client, base, "Practitioner", headers, _count="10")
     for entry in data.get("entry") or []:
         for idt in (entry.get("resource") or {}).get("identifier") or []:
             system = idt.get("system", "") or ""
@@ -70,22 +85,22 @@ def _discover_npi(client: httpx.Client, base: str, npi_system: str) -> str | Non
 
 
 def _roles_for_npi(client: httpx.Client, base: str, system: str, npi: str,
-                   lookup_mode: str) -> dict[str, Any]:
+                   lookup_mode: str, headers: dict[str, str]) -> dict[str, Any]:
     """The PractitionerRole bundle for one NPI, honoring the endpoint's lookup mode.
     "two_step" resolves the Practitioner by NPI then fetches its roles by reference — for
     directories (e.g. UnitedHealthcare/Optum) that don't support the chained search."""
     if lookup_mode == "two_step":
-        p = _query(client, base, "Practitioner", identifier=f"{system}|{npi}", _count="5")
+        p = _query(client, base, "Practitioner", headers, identifier=f"{system}|{npi}", _count="5")
         prac_ids = [res["id"] for ent in (p.get("entry") or [])
                     if (res := ent.get("resource") or {}).get("resourceType") == "Practitioner"
                     and res.get("id")]
         entries: list[dict[str, Any]] = []
         for pid in prac_ids[:3]:
-            rb = _query(client, base, "PractitionerRole",
+            rb = _query(client, base, "PractitionerRole", headers,
                         practitioner=f"Practitioner/{pid}", _count="10")
             entries.extend(rb.get("entry") or [])
         return {"entry": entries}
-    return _query(client, base, "PractitionerRole",
+    return _query(client, base, "PractitionerRole", headers,
                   **{"practitioner.identifier": f"{system}|{npi}", "_count": "5"})
 
 
@@ -93,7 +108,8 @@ def probe(client: httpx.Client, e: PlanNetEndpoint) -> dict[str, Any]:
     """Run the full per-NPI round-trip. Returns {status, total, error}."""
     base = e.base_url.rstrip("/")
     try:
-        head = client.get(f"{base}/PractitionerRole", params={"_count": "1"}, headers=_headers(),
+        headers = _endpoint_headers(client, e)
+        head = client.get(f"{base}/PractitionerRole", params={"_count": "1"}, headers=headers,
                           timeout=_TIMEOUT, follow_redirects=True)
         if head.status_code in (401, 403):
             return {"status": "gated", "total": None, "error": f"HTTP {head.status_code}"}
@@ -105,17 +121,17 @@ def probe(client: httpx.Client, e: PlanNetEndpoint) -> dict[str, Any]:
         total = int(total) if isinstance(total, int) else None
 
         # 2) bogus NPI must NOT be judged in-network (else the filter is ignored).
-        bogus = _roles_for_npi(client, base, e.npi_system, _BOGUS_NPI, e.lookup_mode)
+        bogus = _roles_for_npi(client, base, e.npi_system, _BOGUS_NPI, e.lookup_mode, headers)
         if FhirPlanNetSource._in_network(bogus) is True:
             return {"status": "unusable", "total": total,
                     "error": "ignores the NPI filter (a bogus NPI resolves in-network)"}
 
         # 3) a real listed NPI must be judged in-network under the active strictness.
-        npi = _discover_npi(client, base, e.npi_system)
+        npi = _discover_npi(client, base, e.npi_system, headers)
         if not npi:
             return {"status": "unusable", "total": total,
                     "error": "could not discover a listed NPI to round-trip"}
-        real = _roles_for_npi(client, base, e.npi_system, npi, e.lookup_mode)
+        real = _roles_for_npi(client, base, e.npi_system, npi, e.lookup_mode, headers)
         verdict = FhirPlanNetSource._in_network(real)
         if verdict is not True:
             return {"status": "unusable", "total": total,

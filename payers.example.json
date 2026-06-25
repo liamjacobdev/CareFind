@@ -10,6 +10,20 @@
       "base_url": "https://fhir.example-payer.com/r4",
       "states": ["XX"],
       "npi_system": "http://hl7.org/fhir/sid/us-npi"
+    },
+    {
+      "_note": "EXAMPLE OAuth 2.0 client-credentials shape, for nationals that gate their public directory behind app registration (e.g. Aetna). Provide the FHIR base_url + token_url from the dev portal; keep the secrets OUT of this file by naming env vars (client_id_env/client_secret_env) and setting them in the deploy environment. Use lookup_mode 'two_step' when PractitionerRole can't be searched by practitioner.identifier but Practitioner can be searched by NPI (Aetna's case). Verify with `python -m app.verify_payers` before trusting it.",
+      "id": "aetna",
+      "label": "Aetna",
+      "category": "commercial",
+      "base_url": "https://REPLACE-with-aetna-fhir-host/v1/providerdirectorydata",
+      "lookup_mode": "two_step",
+      "auth": "oauth2",
+      "token_url": "https://apif1.aetna.com/fhir/v1/fhirserver_auth/oauth2/token",
+      "scope": "",
+      "client_id_env": "AETNA_CLIENT_ID",
+      "client_secret_env": "AETNA_CLIENT_SECRET",
+      "npi_system": "http://hl7.org/fhir/sid/us-npi"
     }
   ]
 }

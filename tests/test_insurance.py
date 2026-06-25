@@ -202,6 +202,36 @@ async def test_verified_fhir_carries_per_npi_provenance(temp_db, monkeypatch):
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_oauth_source_attaches_bearer_token(temp_db, monkeypatch):
+    """An OAuth-gated payer: the live source fetches a client-credentials token and sends
+    it as a Bearer on the FHIR call. Without the Bearer the endpoint 401s -> 'unknown',
+    never a fabricated yes."""
+    base = "https://gated.example/r4"
+    monkeypatch.setenv("AETNA_ID", "cid")
+    monkeypatch.setenv("AETNA_SECRET", "sec")
+    monkeypatch.setattr(settings, "load_payers", lambda: [
+        {"id": "aetna", "label": "Aetna", "base_url": base, "auth": "oauth2",
+         "token_url": "https://idp.example/token",
+         "client_id_env": "AETNA_ID", "client_secret_env": "AETNA_SECRET"}])
+    token = respx.post("https://idp.example/token").mock(
+        return_value=httpx.Response(200, json={"access_token": "BTOK", "expires_in": 3600}))
+
+    def pr(request: httpx.Request) -> httpx.Response:
+        if request.headers.get("Authorization") != "Bearer BTOK":
+            return httpx.Response(401, json={"resourceType": "OperationOutcome"})
+        return httpx.Response(200, json=_IN_NETWORK)
+
+    roles = respx.get(f"{base}/PractitionerRole").mock(side_effect=pr)
+    reg = Registry()
+    reg.build()
+    res = await reg.annotate([{"npi": "1111111111", "stateAb": "PA"}], only=["aetna"])
+    assert res["1111111111"]["aetna"]["value"] is True
+    assert res["1111111111"]["aetna"]["confidence"] == "verified"
+    assert token.called and roles.called
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_two_step_lookup_resolves_practitioner_then_roles(temp_db, monkeypatch):
     """For a directory that doesn't support the chained practitioner.identifier search
     (lookup_mode='two_step', e.g. UnitedHealthcare/Optum): resolve the Practitioner by
