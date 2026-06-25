@@ -53,20 +53,24 @@ curl -s https://<project-name>.vercel.app/api/insurance/plans | python3 -c \
 # expect: ['cigna','humana','medicare','priority_partners','unitedhealthcare']
 ```
 
-## Refreshing the data (quarterly Medicare, monthly TiC)
+## Refreshing the data (automated)
 
-The seed is a point-in-time snapshot. To refresh, rebuild it locally and redeploy:
+The seed is a point-in-time snapshot. **It refreshes itself**:
+[`.github/workflows/refresh-medicare-seed.yml`](../.github/workflows/refresh-medicare-seed.yml)
+runs quarterly (and on demand via *Actions → Refresh Medicare seed → Run workflow*). It
+auto-discovers the current CMS enrollment CSV from `data.cms.gov`'s DCAT catalog (no
+hard-coded dated URL), rebuilds `carefind.db.gz`, and commits it **only if it changed** —
+which triggers Vercel's GitHub integration to redeploy. No secrets needed (just the
+default `GITHUB_TOKEN`).
+
+To refresh manually instead:
 
 ```bash
-python -m app.ingest_medicare "<CMS-quarterly-csv-url>"   # updates ./carefind.db
-python -m app.verify_payers                               # re-validate payers + ledger
-gzip -9 -c carefind.db > carefind.db.gz                   # rebuild the seed
+python -c "from app.cms_catalog import latest_medicare_csv_url as u; print(u())"  # current CSV
+python -m app.ingest_medicare "<that-url>"                 # rebuild ./carefind.db
+gzip -9 -c carefind.db > carefind.db.gz                    # rebuild the seed
 git commit -am "data: refresh Medicare seed" && git push  # Vercel auto-redeploys
 ```
-
-This can be automated with a scheduled GitHub Action (ingest → gzip → commit), which then
-triggers a Vercel deploy on push. Not wired by default to keep the repo's git history
-free of large recurring binaries unless you want it.
 
 ## Known trade-offs (honest)
 

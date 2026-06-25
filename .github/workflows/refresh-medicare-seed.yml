@@ -1,0 +1,79 @@
+# Auto-refresh the baked Medicare seed for the cardless Vercel deploy (docs/deploy.md).
+#
+# The Vercel deployment serves a read-only SQLite seed (carefind.db.gz) baked into the
+# repo. CMS republishes the Medicare Fee-For-Service enrollment file quarterly, so this
+# workflow rebuilds the seed from the *current* CSV (auto-discovered from data.cms.gov's
+# DCAT catalog — no hard-coded dated URL) and commits it. The push triggers Vercel's
+# GitHub integration to redeploy automatically.
+#
+# Runs on the 1st of Jan/Apr/Jul/Oct (just after CMS's quarterly update) and on demand.
+# The commit only happens when the seed actually changed, so an unchanged quarter is a
+# no-op. Requires no secrets — only the default GITHUB_TOKEN with contents:write.
+name: Refresh Medicare seed
+
+on:
+  schedule:
+    - cron: "37 10 5 1,4,7,10 *"   # quarterly, a few days into the new quarter
+  workflow_dispatch:
+    inputs:
+      csv_url:
+        description: "Override CSV URL (blank = auto-discover the latest from data.cms.gov)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-medicare-seed
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install runtime deps
+        run: pip install -r requirements.txt
+
+      - name: Resolve the CSV URL (auto-discover unless overridden)
+        id: url
+        env:
+          OVERRIDE: ${{ github.event.inputs.csv_url }}
+        run: |
+          if [ -n "$OVERRIDE" ]; then
+            echo "csv=$OVERRIDE" >> "$GITHUB_OUTPUT"
+          else
+            url="$(python -c 'from app.cms_catalog import latest_medicare_csv_url; print(latest_medicare_csv_url())')"
+            echo "Discovered: $url"
+            echo "csv=$url" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rebuild the SQLite index from the current CSV
+        env:
+          CAREFIND_DB: ./carefind.db
+        run: |
+          rm -f carefind.db
+          python -m app.ingest_medicare "${{ steps.url.outputs.csv }}"
+          python -c "from app import db; n=db.medicare_count(); print('medicare rows:', n); assert n > 1_000_000, 'suspiciously few rows — refusing to ship'"
+
+      - name: Compress to the deploy seed
+        run: gzip -9 -c carefind.db > carefind.db.gz
+
+      - name: Commit the seed if it changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- carefind.db.gz; then
+            echo "Seed unchanged this quarter — nothing to commit."
+          else
+            git add carefind.db.gz
+            git commit -m "data: refresh Medicare seed (auto)"
+            git push
+            echo "Pushed a refreshed seed — Vercel will redeploy."
+          fi

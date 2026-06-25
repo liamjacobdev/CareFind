@@ -7,7 +7,7 @@ import httpx
 import pytest
 import respx
 
-from app import download, ingest_medicare, ingest_tic, ingest_tic_job, verify_payers
+from app import cms_catalog, download, ingest_medicare, ingest_tic, ingest_tic_job, verify_payers
 from app.config import settings
 
 
@@ -176,3 +176,25 @@ def test_stream_rejects_declared_content_length_over_cap(monkeypatch):
         return_value=httpx.Response(200, headers={"content-length": "999"}, content=b"xxxxxxxx"))
     with pytest.raises(download.DownloadTooLarge):
         download.stream_to_bytes("https://x.example/big")
+
+
+@respx.mock
+def test_latest_medicare_csv_url_resolves_from_catalog():
+    """The seed-refresh Action discovers the current quarterly CSV from data.cms.gov."""
+    csv_url = "https://data.cms.gov/sites/default/files/2026-05/abc/PPEF_Enrollment_Extract_2026.04.01.csv"
+    respx.get(cms_catalog.CATALOG_URL).mock(return_value=httpx.Response(200, json={"dataset": [
+        {"title": "Some Other Dataset", "distribution": [{"downloadURL": "https://x/y.csv"}]},
+        {"title": "Medicare Fee-For-Service  Public Provider Enrollment",
+         "distribution": [
+            {"downloadURL": "https://data.cms.gov/x/dictionary.pdf"},
+            {"downloadURL": csv_url}]},
+    ]}))
+    assert cms_catalog.latest_medicare_csv_url() == csv_url
+
+
+@respx.mock
+def test_latest_medicare_csv_url_raises_when_absent():
+    respx.get(cms_catalog.CATALOG_URL).mock(
+        return_value=httpx.Response(200, json={"dataset": [{"title": "Unrelated"}]}))
+    with pytest.raises(LookupError):
+        cms_catalog.latest_medicare_csv_url()
