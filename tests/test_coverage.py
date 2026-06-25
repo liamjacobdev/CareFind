@@ -45,7 +45,7 @@ async def test_nppes_cache_does_not_pin_a_failed_query():
 
 # ── Verified-coverage-by-state report ────────────────────────────────────────────
 def test_coverage_report_scopes_programs_by_state(temp_db, monkeypatch):
-    """Medicare (national) covers every state; the validated MD endpoints cover only MD."""
+    """Medicare (national) covers every state; a validated regional MD endpoint covers only MD."""
     monkeypatch.setattr(settings, "use_planet_registry", True)
     db.medicare_add_many(["1003000126"])
     reg = Registry()
@@ -54,16 +54,16 @@ def test_coverage_report_scopes_programs_by_state(temp_db, monkeypatch):
     rep = coverage.coverage_report(reg)
     prog_ids = {p["id"] for p in rep["verified_programs"]}
     assert "medicare" in prog_ids
-    assert {"priority_partners", "advantage_md"} <= prog_ids  # MD endpoints wired + available
+    assert "priority_partners" in prog_ids  # validated regional MD endpoint, wired + available
 
-    # Medicare is national; the MD endpoints only appear for MD.
+    # Medicare is national; the regional MD endpoint only appears for MD.
     assert "medicare" in rep["by_state"]["CA"] and "priority_partners" not in rep["by_state"]["CA"]
-    assert {"medicare", "priority_partners", "advantage_md"} <= set(rep["by_state"]["MD"])
+    assert {"medicare", "priority_partners"} <= set(rep["by_state"]["MD"])
 
     assert rep["verified_counts"]["medicare"] == 1
     assert rep["states_with_verified_coverage"] == len(coverage.STATES)  # Medicare everywhere
     # A program scope is reported honestly (national vs the regional state list).
-    md = next(p for p in rep["verified_programs"] if p["id"] == "advantage_md")
+    md = next(p for p in rep["verified_programs"] if p["id"] == "priority_partners")
     assert md["scope"] == ["MD"]
     medi = next(p for p in rep["verified_programs"] if p["id"] == "medicare")
     assert medi["scope"] is None  # national

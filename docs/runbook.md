@@ -15,8 +15,8 @@ python -m app.ingest_medicare sample_medicare.csv    # seed Medicare (or a real 
 uvicorn app.main:app --port 8000                     # open http://localhost:8000
 ```
 
-Verified FHIR Plan-Net endpoints (Priority Partners, Advantage MD) are wired out of the
-box. The frontend is prebuilt (`carefind.bundle.js` is committed); to rebuild after a
+Verified FHIR Plan-Net endpoints (UnitedHealthcare, Cigna, Humana, Priority Partners) are
+wired out of the box. The frontend is prebuilt (`carefind.bundle.js` is committed); to rebuild after a
 `src/` change: `npm install && npm run build`.
 
 **Production** (TLS + headers + real API origin):

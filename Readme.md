@@ -41,23 +41,24 @@ The **validated public endpoints** in `app/planet_registry.py` are wired as *Con
 - a **bogus** NPI must *not* resolve in-network — otherwise the directory ignores the NPI filter and would mark everyone in-network (a fabricated *yes*; e.g. Connecticut's Medicaid directory does this);
 - a **real, listed** NPI must resolve in-network — otherwise per-NPI search returns nothing for everyone (a fabricated *no*; e.g. Premera and the reachable state-Medicaid directories do this).
 
-**Validated public endpoints** (live-checked 2026-06-23; see [docs/provenance.md](docs/provenance.md) for the full, auto-generated ledger including the tracked-but-not-wired ones):
+**Validated public endpoints** (live-checked 2026-06-24; see [docs/provenance.md](docs/provenance.md) for the full, auto-generated ledger including the tracked-but-not-wired ones):
 
 | Payer (scope) | catalog id | Base URL | Round-trip |
 |---|---|---|---|
 | **UnitedHealthcare (national, commercial)** | `unitedhealthcare` | `https://flex.optum.com/fhirpublic/R4` | ✓ bogus→none, listed→active + network-linked (two-step) |
 | **Cigna (national, commercial)** | `cigna` | `https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1` | ✓ bogus→none, listed→active + network-linked |
+| **Humana (national, commercial)** | `humana` | `https://fhir.humana.com/api` | ✓ bogus→none, listed→active + network-linked (two-step) |
 | Priority Partners — Johns Hopkins (MD Medicaid) | `priority_partners` | `https://api.jhhpfhir.com/r4/public-pp` | ✓ bogus→none, listed→in-network (Bundle 83,024) |
-| Johns Hopkins Advantage MD (MD Medicare Advantage) | `advantage_md` | `https://api.jhhpfhir.com/r4/public-ma` | ✓ bogus→none, listed→in-network (Bundle 107,487) |
 
-> **Honest finding (the public set is small, but it includes the two biggest insurers).**
-> **UnitedHealthcare** and **Cigna** both publish fully public, unauthenticated Da Vinci
-> PDEX Plan-Net directories whose PractitionerRoles carry real network links — both pass
-> the round-trip and are wired as verified *national* commercial filters. (UHC doesn't
-> support the chained `practitioner.identifier` search, so it uses a **two-step** lookup —
-> resolve the Practitioner by NPI, then its roles — configured per endpoint.) Other carriers
-> like Aetna and Humana gate their Plan-Net behind developer registration or respond too
-> slowly to use; and the 37 State Medicaid directories in the
+> **Honest finding (the public set is small, but it now includes three of the top-five insurers).**
+> **UnitedHealthcare**, **Cigna**, and **Humana** all publish fully public, unauthenticated
+> Da Vinci PDEX Plan-Net directories whose PractitionerRoles carry real network links — all
+> three pass the round-trip and are wired as verified *national* commercial filters. (UHC and
+> Humana don't support the chained `practitioner.identifier` search, so they use a **two-step**
+> lookup — resolve the Practitioner by NPI, then its roles — configured per endpoint.) Other
+> carriers like Aetna and Anthem/Elevance gate their Plan-Net behind developer registration
+> (reachable, but `PractitionerRole` returns 401/403 without a key); and the 37 State Medicaid
+> directories in the
 > [CMS SMA-Endpoint-Directory](https://github.com/CMSgov/SMA-Endpoint-Directory) screened
 > here return a Bundle but **fail the per-NPI round-trip** (no network links, or empty
 > results for listed NPIs), so wiring them would fabricate answers. They stay **estimated**,

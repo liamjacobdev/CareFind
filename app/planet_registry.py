@@ -87,11 +87,18 @@ REGISTRY: list[PlanNetEndpoint] = [
         states=["MD"], status="validated", bundle_total=83024, last_checked="2026-06-16",
         note="Maryland Medicaid MCO (Johns Hopkins Health Plans). NPI round-trip verified.",
     ),
+    # DEMOTED 2026-06-24: an upstream regression. Practitioners still resolve by NPI, but
+    # they now carry ZERO PractitionerRoles (via both chained and two_step), so a listed,
+    # in-network MA provider resolves to False — a fabricated "no". Demoted to unusable to
+    # keep the trust model honest; it re-graduates automatically the moment its roles
+    # return. (Priority Partners, same host, is unaffected and stays validated.)
     PlanNetEndpoint(
         id="advantage_md", label="Johns Hopkins Advantage MD (Medicare Advantage)",
         base_url="https://api.jhhpfhir.com/r4/public-ma", category="medicare_advantage",
-        states=["MD"], status="validated", bundle_total=107487, last_checked="2026-06-16",
-        note="Johns Hopkins MA plan; same public host as Priority Partners. NPI round-trip verified.",
+        states=["MD"], status="unusable",
+        note="Upstream regression: Practitioners resolve by NPI but now have 0 "
+             "PractitionerRoles, so a listed provider resolves to False (fabricated 'no'). "
+             "Stays an ESTIMATED catalog filter, never verified, until its roles return.",
     ),
     # First validated NATIONAL commercial payer. Graduates the catalog's `cigna` estimate
     # to Confirmed (shared id = stable join key), so Cigna flips estimated->verified
@@ -118,10 +125,40 @@ REGISTRY: list[PlanNetEndpoint] = [
              "practitioner.identifier search). NPI round-trip verified (bogus NPI -> no "
              "Practitioner -> not in-network; a listed NPI -> active, network-linked role).",
     ),
+    # Top-5 national insurer; dominant in Medicare Advantage. Public FHIR base; the chained
+    # practitioner.identifier search read-times-out (>40s), but the per-NPI two_step path is
+    # fast (~1.5s round-trip) and network-linked, so it passes the round-trip via two_step.
+    # Graduates the catalog's `humana` estimate to Confirmed.
+    PlanNetEndpoint(
+        id="humana", label="Humana",
+        base_url="https://fhir.humana.com/api", category="commercial",
+        states=None, status="validated", bundle_total=12531641,
+        last_checked="2026-06-24", lookup_mode="two_step",
+        note="National commercial (top-5; dominant in Medicare Advantage). Public Da Vinci "
+             "PDEX Plan-Net. The chained practitioner.identifier PractitionerRole search "
+             "read-times-out, so it requires two_step (resolve Practitioner by NPI, then "
+             "fetch roles by reference) — each call ~1.5s. NPI round-trip verified (bogus "
+             "NPI -> no Practitioner -> not in-network; a listed NPI -> active, "
+             "network-linked role).",
+    ),
 
     # ── Tracked but NOT wired — each fails the per-NPI usability bar for a documented
     # reason. Re-check with app/verify_payers.py; if a payer fixes its directory it
     # graduates automatically. NEVER wire these as verified until they pass.
+    # National commercial (Elevance, formerly Anthem). Reachable provider-directory base,
+    # but /PractitionerRole returns HTTP 403 — the path is literally `.../registered/...`:
+    # it requires developer registration for an API key. The cheap unlock (follow-up 2):
+    # the owner registers for a key, sets `api_key_header`/`api_key` on this entry, and
+    # `verify_payers` trust-gates it. Highest-value gated target alongside Aetna.
+    PlanNetEndpoint(
+        id="elevance", label="Elevance Health (Anthem / Wellpoint)",
+        base_url="https://totalview.healthos.elevancehealth.com/resources/registered/Wellpoint/api/v1/fhir",
+        category="commercial", states=None, status="gated",
+        note="National commercial. Public provider-directory base reachable but "
+             "/PractitionerRole returns HTTP 403 — needs developer registration for an API "
+             "key (api_key_header/api_key). Wires the moment a valid key passes the "
+             "round-trip; do not wire until it does.",
+    ),
     PlanNetEndpoint(
         id="premera_bcbs", label="Premera Blue Cross (WA/AK)",
         base_url="https://opala.tech/provdir/premera/v1/fhir-r4", category="commercial",
@@ -155,19 +192,6 @@ REGISTRY: list[PlanNetEndpoint] = [
         states=["WA"], status="unusable",
         note="Returns a Bundle but practitioner.identifier search returns 0 roles even "
              "for a listed NPI — not usable for per-NPI verification.",
-    ),
-    # National commercial: its public FHIR /metadata responds, but /PractitionerRole
-    # times out from the current validation environment (slow or geo-restricted). A
-    # strong candidate — re-check `python -m app.verify_payers` from an unrestricted
-    # network (or the deployed box); it graduates the catalog `humana` estimate the
-    # moment it passes the round-trip.
-    PlanNetEndpoint(
-        id="humana", label="Humana",
-        base_url="https://fhir.humana.com/api", category="commercial",
-        states=None, status="unreachable",
-        note="Public FHIR base reachable (/metadata 200) but /PractitionerRole read-times-out "
-             "from the validation environment; not yet round-trip-verified. Re-check from an "
-             "unrestricted network.",
     ),
 ]
 

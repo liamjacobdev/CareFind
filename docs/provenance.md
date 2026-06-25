@@ -8,18 +8,19 @@ registration; **unusable** = returns a Bundle but can't answer per-NPI truthfull
 (ignores the filter, or returns nothing for listed providers); **unreachable** = no
 response from the validation environment; **candidate** = not yet checked.
 
-_Last generated: 2026-06-23_
+_Last generated: 2026-06-24_
 
 | Payer / program | Catalog id | Category | States | Status | Bundle total | Checked | Note |
 |---|---|---|---|---|---|---|---|
-| Johns Hopkins Advantage MD (Medicare Advantage) | `advantage_md` | medicare_advantage | MD | validated | 107,860 | 2026-06-23 | Johns Hopkins MA plan; same public host as Priority Partners. NPI round-trip verified. |
-| Cigna | `cigna` | commercial | national | validated | — | 2026-06-23 | National commercial. Public, unauthenticated Da Vinci PDEX Plan-Net; PractitionerRoles carry network-reference extensions to Cigna Network Organizations. NPI round-trip verified (bogus NPI -> empty; a listed NPI -> active, network-linked role). |
-| Priority Partners (JHHP, MD Medicaid) | `priority_partners` | medicaid | MD | validated | 83,527 | 2026-06-23 | Maryland Medicaid MCO (Johns Hopkins Health Plans). NPI round-trip verified. |
-| UnitedHealthcare | `unitedhealthcare` | commercial | national | validated | 10,000 | 2026-06-23 | National commercial (Optum-hosted public Plan-Net). PractitionerRoles carry network-reference extensions; requires two_step lookup (no chained practitioner.identifier search). NPI round-trip verified (bogus NPI -> no Practitioner -> not in-network; a listed NPI -> active, network-linked role). |
+| Cigna | `cigna` | commercial | national | validated | — | 2026-06-24 | National commercial. Public, unauthenticated Da Vinci PDEX Plan-Net; PractitionerRoles carry network-reference extensions to Cigna Network Organizations. NPI round-trip verified (bogus NPI -> empty; a listed NPI -> active, network-linked role). |
+| Humana | `humana` | commercial | national | validated | 12,531,641 | 2026-06-24 | National commercial (top-5; dominant in Medicare Advantage). Public Da Vinci PDEX Plan-Net. The chained practitioner.identifier PractitionerRole search read-times-out, so it requires two_step (resolve Practitioner by NPI, then fetch roles by reference) — each call ~1.5s. NPI round-trip verified (bogus NPI -> no Practitioner -> not in-network; a listed NPI -> active, network-linked role). |
+| Priority Partners (JHHP, MD Medicaid) | `priority_partners` | medicaid | MD | validated | 83,640 | 2026-06-24 | Maryland Medicaid MCO (Johns Hopkins Health Plans). NPI round-trip verified. |
+| UnitedHealthcare | `unitedhealthcare` | commercial | national | validated | 10,000 | 2026-06-24 | National commercial (Optum-hosted public Plan-Net). PractitionerRoles carry network-reference extensions; requires two_step lookup (no chained practitioner.identifier search). NPI round-trip verified (bogus NPI -> no Practitioner -> not in-network; a listed NPI -> active, network-linked role). |
 | Connecticut Medicaid (HUSKY) directory | `ct_medicaid` | medicaid | CT | gated | — | — | HTTP 401 |
+| Elevance Health (Anthem / Wellpoint) | `elevance` | commercial | national | gated | — | — | HTTP 403 |
 | Johns Hopkins EHP (commercial) | `jhhp_ehp` | commercial | MD | gated | — | — | HTTP 401 |
-| Premera Blue Cross (WA/AK) | `premera_bcbs` | commercial | WA, AK | unusable | 94,995 | — | a listed NPI resolves to False, not in-network (no network link, or per-NPI search returns nothing) |
+| Johns Hopkins Advantage MD (Medicare Advantage) | `advantage_md` | medicare_advantage | MD | unusable | 108,000 | — | a listed NPI resolves to False, not in-network (no network link, or per-NPI search returns nothing) |
+| Premera Blue Cross (WA/AK) | `premera_bcbs` | commercial | WA, AK | unusable | 94,999 | — | a listed NPI resolves to False, not in-network (no network link, or per-NPI search returns nothing) |
 | Washington Apple Health (Medicaid) directory | `wa_medicaid` | medicaid | WA | unusable | — | — | a listed NPI resolves to False, not in-network (no network link, or per-NPI search returns nothing) |
-| Humana | `humana` | commercial | national | unreachable | — | — | ReadTimeout: The read operation timed out |
 
-**4 validated / 9 tracked.** The freely-validatable, NPI-usable public set is small — most nationals gate behind developer registration and many public directories don't honor per-NPI search. This ledger grows only as endpoints genuinely pass the round-trip, never by assertion.
+**4 validated / 10 tracked.** The freely-validatable, NPI-usable public set is small — most nationals gate behind developer registration and many public directories don't honor per-NPI search. This ledger grows only as endpoints genuinely pass the round-trip, never by assertion.
