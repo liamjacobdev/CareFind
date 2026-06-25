@@ -20,6 +20,11 @@ jsconfig.json
 .prettierrc
 .prettierignore
 
+# pyproject.toml here is tool config only (ruff/mypy/pytest) — it has NO [project] table,
+# so Vercel's uv-based Python builder errors trying to install from it. Hide it so the
+# builder falls back to the pinned requirements.txt. Nothing reads it at runtime.
+pyproject.toml
+
 # Dev-only / not needed at serve time.
 .venv/
 __pycache__/
