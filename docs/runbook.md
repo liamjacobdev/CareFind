@@ -23,10 +23,15 @@ wired out of the box. The frontend is prebuilt (`carefind.bundle.js` is committe
 ```bash
 python configure_frontend.py https://api.yourdomain.com --claim-email you@real.com
 # rewrites carefind.config.js (apiBase/claimEmail) + the HTML CSP connect-src
-docker compose up -d        # uvicorn (4 workers) behind Caddy (auto Let's Encrypt)
+docker compose up -d        # uvicorn (1 worker) behind Caddy (auto Let's Encrypt)
 ```
 Set env: `ALLOWED_ORIGINS`, `CAREFIND_TRUST_PROXY=true`, `CAREFIND_ADMIN_TOKEN`,
 `CAREFIND_UA=you@email`, and (for the cron) `CAREFIND_MEDICARE_INGEST_URL`.
+
+> **Concrete $0 path:** [docs/deploy.md](deploy.md) is a turnkey, free deployment guide
+> (Oracle Cloud Always Free VM + DuckDNS subdomain) with a one-shot `deploy/setup.sh`.
+> A single worker is deliberate — the Nominatim throttle + in-process rate limiter are
+> per-process (see the Dockerfile note); scale by fronting a shared cache, not workers.
 
 ## Ingestion (no manual data steps)
 - **Automated:** the [scheduled-ingest cron](../.github/workflows/ingest.yml) POSTs the
