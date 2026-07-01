@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="CareFind — search the official US CMS provider registry with verified insurance.">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d241d"/>
+      <stop offset="1" stop-color="#061510"/>
+    </linearGradient>
+    <linearGradient id="jade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1fb083"/>
+      <stop offset="1" stop-color="#0c7152"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <!-- faint concentric "reach" rings on the right, echoing the map -->
+  <g fill="none" stroke="#1fb083" stroke-opacity="0.10" stroke-width="2">
+    <circle cx="1010" cy="315" r="120"/>
+    <circle cx="1010" cy="315" r="220"/>
+    <circle cx="1010" cy="315" r="320"/>
+  </g>
+  <!-- top hairline + live pill -->
+  <rect x="80" y="86" width="1040" height="1" fill="#ffffff" fill-opacity="0.10"/>
+  <g transform="translate(80,60)">
+    <circle cx="7" cy="7" r="6" fill="#1fb083"/>
+    <text x="24" y="12" font-family="Helvetica, Arial, sans-serif" font-size="17" font-weight="700" letter-spacing="2.5" fill="#9fd8c4">LIVE NATIONAL REGISTRY</text>
+  </g>
+  <!-- logo mark: location pin + plus -->
+  <g transform="translate(80,150)">
+    <path d="M36 0C16.1 0 0 15.6 0 34.8 0 60.9 36 96 36 96s36-35.1 36-61.2C72 15.6 55.9 0 36 0Z" fill="url(#jade)"/>
+    <path d="M36 18v33M19.5 34.5h33" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/>
+  </g>
+  <!-- wordmark -->
+  <text x="176" y="212" font-family="Georgia, 'Times New Roman', serif" font-size="86" fill="#f3f1ea">Care<tspan font-style="italic" fill="#3ec79a">Find</tspan></text>
+  <!-- headline -->
+  <text x="82" y="326" font-family="Georgia, 'Times New Roman', serif" font-size="45" font-weight="700" fill="#f3f1ea">Find a real doctor who takes your insurance.</text>
+  <!-- subhead -->
+  <text x="84" y="384" font-family="Helvetica, Arial, sans-serif" font-size="27" fill="#9fb0a7">Search 8M+ licensed US providers from the official CMS registry —</text>
+  <text x="84" y="420" font-family="Helvetica, Arial, sans-serif" font-size="27" fill="#9fb0a7">with insurance acceptance verified from real sources, never guessed.</text>
+  <!-- trust chips -->
+  <g font-family="Helvetica, Arial, sans-serif" font-size="22" font-weight="700">
+    <g transform="translate(84,470)">
+      <rect width="250" height="52" rx="26" fill="#12281f" stroke="#1f4a3a"/>
+      <circle cx="30" cy="26" r="7" fill="#1fb083"/>
+      <text x="50" y="34" fill="#d8ede4">Verified insurance</text>
+    </g>
+    <g transform="translate(352,470)">
+      <rect width="220" height="52" rx="26" fill="#12281f" stroke="#1f4a3a"/>
+      <circle cx="30" cy="26" r="7" fill="#1fb083"/>
+      <text x="50" y="34" fill="#d8ede4">8M+ records</text>
+    </g>
+    <g transform="translate(590,470)">
+      <rect width="240" height="52" rx="26" fill="#12281f" stroke="#1f4a3a"/>
+      <circle cx="30" cy="26" r="7" fill="#1fb083"/>
+      <text x="50" y="34" fill="#d8ede4">Free · no login</text>
+    </g>
+  </g>
+  <text x="82" y="586" font-family="Helvetica, Arial, sans-serif" font-size="21" fill="#728178">care-find-lac.vercel.app</text>
+</svg>

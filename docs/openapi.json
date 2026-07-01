@@ -673,6 +673,22 @@
         "summary": "App Icon"
       }
     },
+    "/carefind-og.svg": {
+      "get": {
+        "operationId": "og_image_carefind_og_svg_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Og Image"
+      }
+    },
     "/carefind.bundle.js": {
       "get": {
         "operationId": "frontend_bundle_carefind_bundle_js_get",
@@ -758,6 +774,22 @@
         "summary": "Coverage Endpoint"
       }
     },
+    "/favicon.ico": {
+      "get": {
+        "operationId": "favicon_favicon_ico_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Favicon"
+      }
+    },
     "/healthz": {
       "get": {
         "description": "Liveness + data-freshness. Flips to 503 (the dead-man's-switch an uptime monitor\nwatches) when a tracked source has gone stale past its SLO.",
@@ -841,6 +873,38 @@
           }
         },
         "summary": "Readyz"
+      }
+    },
+    "/robots.txt": {
+      "get": {
+        "operationId": "robots_robots_txt_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robots"
+      }
+    },
+    "/sitemap.xml": {
+      "get": {
+        "operationId": "sitemap_sitemap_xml_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sitemap"
       }
     }
   }

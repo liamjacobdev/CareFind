@@ -20,6 +20,7 @@ _FRONTEND_BUNDLE = _FRONTEND.parent / "carefind.bundle.js"
 _FRONTEND_CONFIG = _FRONTEND.parent / "carefind.config.js"
 _FRONTEND_THEME = _FRONTEND.parent / "carefind.theme.js"
 _ICON = _FRONTEND.parent / "carefind-icon.svg"
+_OG_IMAGE = _FRONTEND.parent / "carefind-og.svg"
 
 
 def _static_file(request: Request, path: Path, media_type: str, missing: str) -> Response:
@@ -97,4 +98,50 @@ def frontend_logic(request: Request) -> Response:
 def app_icon(request: Request) -> Response:
     return _static_file(request, _ICON, "image/svg+xml",
                         "carefind-icon.svg not found next to the app package.")
+
+
+@router.get("/carefind-og.svg")
+def og_image(request: Request) -> Response:
+    # Social-share card (og:image / twitter:image). On Vercel the physical file is
+    # static-served; this route serves it app-direct (local dev / self-host).
+    return _static_file(request, _OG_IMAGE, "image/svg+xml",
+                        "carefind-og.svg not found next to the app package.")
+
+
+@router.get("/favicon.ico")
+def favicon(request: Request) -> Response:
+    # Browsers and crawlers request /favicon.ico directly regardless of the <link> icon;
+    # answer with the SVG mark (modern engines accept image/svg+xml here) instead of a 404.
+    return _static_file(request, _ICON, "image/svg+xml",
+                        "carefind-icon.svg not found next to the app package.")
+
+
+@router.get("/robots.txt")
+def robots(request: Request) -> Response:
+    # Allow crawling the app, keep bots out of the JSON API (no index value, wastes crawl
+    # budget), and point them at the sitemap. Origin-aware so it's correct on any deploy.
+    origin = _request_origin(request) or ""
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /api/\n"
+        f"{'Sitemap: ' + origin + '/sitemap.xml' if origin else ''}\n"
+    )
+    return Response(body, media_type="text/plain",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
+@router.get("/sitemap.xml")
+def sitemap(request: Request) -> Response:
+    # Minimal but valid sitemap for the single-page app. Structured as a real urlset so it
+    # extends cleanly when specialty/city landing pages are added later.
+    origin = _request_origin(request) or ""
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"  <url><loc>{origin}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n"
+        "</urlset>\n"
+    )
+    return Response(body, media_type="application/xml",
+                    headers={"Cache-Control": "public, max-age=86400"})
 

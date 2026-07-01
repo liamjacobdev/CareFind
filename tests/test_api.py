@@ -133,6 +133,43 @@ def test_config_js_same_origin_rewrites_apibase(client, monkeypatch):
     assert "localhost:8000" not in r.text
 
 
+def test_robots_txt_allows_crawl_blocks_api_and_links_sitemap(client):
+    r = client.get("/robots.txt")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/plain")
+    body = r.text
+    assert "User-agent: *" in body and "Allow: /" in body
+    assert "Disallow: /api/" in body          # keep bots out of the JSON API
+    assert "/sitemap.xml" in body             # points crawlers at the sitemap
+
+
+def test_sitemap_is_valid_urlset(client):
+    r = client.get("/sitemap.xml")
+    assert r.status_code == 200
+    assert "xml" in r.headers["content-type"]
+    assert "<urlset" in r.text and "<loc>" in r.text and "</urlset>" in r.text
+
+
+def test_favicon_served_not_404(client):
+    r = client.get("/favicon.ico")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/svg+xml")
+
+
+def test_og_image_served(client):
+    r = client.get("/carefind-og.svg")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/svg+xml")
+    assert "<svg" in r.text
+
+
+def test_index_has_canonical_and_social_meta(client):
+    html = client.get("/").text
+    assert 'rel="canonical"' in html
+    assert 'property="og:image"' in html
+    assert 'name="twitter:card"' in html
+
+
 @pytest.mark.asyncio
 async def test_geocode_degrades_to_no_coords_when_chain_down(temp_db, monkeypatch):
     """When the geocoder chain is down, geocoding degrades to None — never a
