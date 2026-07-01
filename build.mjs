@@ -22,7 +22,11 @@ await build({
   target: 'es2020',
   charset: 'utf8',
   legalComments: 'none',
-  minify: false, // readable, reviewable diffs; size is handled by ETag caching
+  // Minify for the wire: esbuild is deterministic (pinned version + fixed options), so the
+  // committed artifact still reproduces byte-for-byte and CI's diff gate holds. The readable,
+  // reviewable source lives in src/ (and carefind.logic.js, served separately) — the bundle
+  // is a generated artifact, so shipping it minified cuts transfer + parse/eval cost.
+  minify: true,
   banner: { js: banner },
   outfile: 'carefind.bundle.js',
 });

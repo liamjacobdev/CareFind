@@ -6,6 +6,14 @@
       "includeFiles": "carefind*"
     }
   },
+  "headers": [
+    {
+      "source": "/(carefind\\.bundle\\.js|carefind\\.theme\\.js|carefind\\.logic\\.js|carefind\\.config\\.js|carefind-icon\\.svg)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=300, stale-while-revalidate=86400" }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/api/index" }
   ]

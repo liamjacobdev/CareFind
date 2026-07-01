@@ -27,7 +27,12 @@
   <link rel="preconnect" href="https://unpkg.com" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- Fetch the app's own scripts in parallel with the render-blocking font CSS (they load
+       at body-end, so without this they'd wait for parse). Only the weights actually used
+       are requested (Fraunces 500/600/700 for display; Jakarta 400–700 for UI). -->
+  <link rel="preload" href="carefind.config.js" as="script" />
+  <link rel="preload" href="carefind.bundle.js" as="script" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Cpath d='M18 2C11.4 2 6 7.3 6 13.9 6 22.6 18 34 18 34s12-11.4 12-20.1C30 7.3 24.6 2 18 2Z' fill='%230f7a5f'/%3E%3Cpath d='M18 9.2v9.4M13.3 13.9h9.4' stroke='%23fff' stroke-width='3.1' stroke-linecap='round'/%3E%3C/svg%3E" />
   <meta name="theme-color" content="#0d241d" />
   <link rel="apple-touch-icon" href="/carefind-icon.svg" />
@@ -364,6 +369,21 @@
   .carefind-popup .leaflet-popup-tip { box-shadow:var(--shadow-md); background:var(--surface); }
   .carefind-popup a.leaflet-popup-close-button { color:var(--faint); }
   .carefind-popup .leaflet-popup-content { margin:12px 14px; font-family:'Plus Jakarta Sans',sans-serif; }
+  /* Theme Leaflet's own chrome (zoom control + attribution) so it matches the surface
+     tokens in both light and dark — Leaflet ships hard white/black, which clashes on the
+     dark map. */
+  .leaflet-bar { border:1px solid var(--border-2); box-shadow:var(--shadow-md); border-radius:var(--r-sm); overflow:hidden; }
+  .leaflet-bar a, .leaflet-touch .leaflet-bar a {
+    background:var(--surface); color:var(--muted); border-bottom-color:var(--border);
+    transition:background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+  .leaflet-bar a:hover, .leaflet-touch .leaflet-bar a:hover { background:var(--surface-3); color:var(--ink); }
+  .leaflet-bar a:first-child { border-top-left-radius:var(--r-sm); border-top-right-radius:var(--r-sm); }
+  .leaflet-bar a:last-child { border-bottom-left-radius:var(--r-sm); border-bottom-right-radius:var(--r-sm); border-bottom:none; }
+  .leaflet-bar a.leaflet-disabled { background:var(--surface-2); color:var(--faint); }
+  .leaflet-control-attribution {
+    background:color-mix(in srgb, var(--surface) 82%, transparent) !important; color:var(--faint);
+    border-top-left-radius:var(--r-xs); backdrop-filter:blur(4px); font-size:10px; }
+  .leaflet-control-attribution a { color:var(--muted); }
   .popup-name { font-weight:700; font-size:.86rem; color:var(--ink); margin-bottom:2px; }
   .popup-specialty { font-size:.72rem; font-weight:600; color:var(--jade-d); margin-bottom:7px; }
   .popup-row { font-size:.72rem; color:var(--muted); display:flex; gap:5px; align-items:flex-start; margin-bottom:4px; }
