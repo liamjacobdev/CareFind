@@ -109,11 +109,17 @@ def test_config_load_payers_tolerates_malformed_file(tmp_path, monkeypatch):
 
 
 def test_config_js_static_by_default(client):
-    """Default: config.js is served verbatim (a separately-hosted frontend keeps its
-    configure_frontend-baked apiBase)."""
+    """Default (no CAREFIND_SAME_ORIGIN): config.js is served verbatim, so a
+    separately-hosted frontend keeps whatever apiBase configure_frontend baked in —
+    the shipped file's origin, untouched (localhost in dev, the prod origin once baked)."""
+    import re
+    from pathlib import Path
+    shipped = (Path(main.__file__).resolve().parent.parent / "carefind.config.js").read_text(encoding="utf-8")
+    m = re.search(r"apiBase:\s*'([^']*)'", shipped)
+    assert m, "carefind.config.js must define an apiBase"
     r = client.get("/carefind.config.js")
     assert r.status_code == 200
-    assert "apiBase: 'http://localhost:8000'" in r.text  # the shipped default, untouched
+    assert f"apiBase: '{m.group(1)}'" in r.text  # served verbatim, whatever origin is baked
 
 
 def test_config_js_same_origin_rewrites_apibase(client, monkeypatch):
