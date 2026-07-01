@@ -84,6 +84,17 @@ function esc(s) {
     .replace(/'/g, '&#39;');
 }
 
+// One CSV cell, RFC-4180 quoted AND neutralized against spreadsheet formula
+// injection (CWE-1236). Provider/org names come from NPPES, so a value that begins
+// with a formula trigger (= + - @, or a leading tab/CR that Excel strips to reveal
+// one) is prefixed with a single quote so Excel/Sheets treat the whole cell as text
+// rather than executing it when the exported file is opened.
+function csvCell(v) {
+  let s = String(v == null ? '' : v);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
 function buildNpiParams(f) {
   const p = new URLSearchParams({ version: '2.1', limit: f.limit, skip: '0' });
   if (f.npi) {
@@ -295,6 +306,7 @@ export {
   adaptBackendProvider,
   coverageStatus,
   fmtDate,
+  csvCell,
 };
 export default {
   TAXONOMY_MAP,
@@ -310,4 +322,5 @@ export default {
   adaptBackendProvider,
   coverageStatus,
   fmtDate,
+  csvCell,
 };

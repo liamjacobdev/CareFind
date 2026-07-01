@@ -19,7 +19,28 @@ const {
   TAXONOMY_MAP,
   coverageStatus,
   fmtDate,
+  csvCell,
 } = logic;
+
+describe('csvCell — export quoting + formula-injection guard (CWE-1236)', () => {
+  it('quotes plainly and doubles embedded quotes', () => {
+    expect(csvCell('Smith')).toBe('"Smith"');
+    expect(csvCell('A "B" C')).toBe('"A ""B"" C"');
+    expect(csvCell(null)).toBe('""');
+    expect(csvCell(undefined)).toBe('""');
+  });
+  it('neutralizes leading formula triggers so a spreadsheet treats them as text', () => {
+    for (const bad of ['=1+1', '+SUM(A1)', '-2+3', '@X', '=cmd|"/c calc"!A1']) {
+      const out = csvCell(bad);
+      expect(out.startsWith('"\'')).toBe(true); // prefixed with a quote inside the CSV quoting
+      expect(out).toContain(bad.replace(/"/g, '""'));
+    }
+  });
+  it('leaves a safe value with an interior +/-/@ untouched', () => {
+    expect(csvCell('Mercy-Health')).toBe('"Mercy-Health"');
+    expect(csvCell('a+b clinic')).toBe('"a+b clinic"');
+  });
+});
 
 describe('fmtDate — provenance "checked <date>" (A3)', () => {
   it('formats epoch seconds as a stable UTC date', () => {

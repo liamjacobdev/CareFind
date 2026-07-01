@@ -29,6 +29,7 @@ const {
   adaptBackendProvider,
   coverageStatus,
   fmtDate,
+  csvCell,
 } = logic;
 
 const LS_KEY = 'carefind_saved_v4';
@@ -1408,8 +1409,8 @@ function exportFavorites(kind) {
     fname = 'carefind-saved.json';
   } else {
     const cols = ['npi', 'name', 'specialty', 'fullAddress', 'phone', 'fax', 'gender', 'status'];
-    const esc2 = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
-    const rows = [cols.join(',')].concat(items.map((d) => cols.map((c) => esc2(d[c])).join(',')));
+    // csvCell quotes AND neutralizes spreadsheet formula injection (shared, unit-tested).
+    const rows = [cols.join(',')].concat(items.map((d) => cols.map((c) => csvCell(d[c])).join(',')));
     blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     fname = 'carefind-saved.csv';
   }
@@ -1631,7 +1632,9 @@ function formatDate(s) {
   if (!s) return '';
   const d = new Date(s);
   if (isNaN(d.getTime())) return s;
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  // NPPES dates are date-only ("YYYY-MM-DD"), parsed as UTC midnight — format in UTC too
+  // so they don't slip to the previous day in western timezones (matches fmtDate).
+  return d.toLocaleDateString('en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' });
 }
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
