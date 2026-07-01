@@ -79,6 +79,44 @@ def test_validator_rejects_endpoint_that_returns_nothing_for_listed_npis():
 
 
 @respx.mock
+def test_validator_validates_two_step_endpoint_requiring_a_search_param():
+    """The Excellus class: a compliant directory that rejects an unfiltered browse (requires
+    a search param) and offers no chained search, yet answers the two_step per-NPI lookup
+    truthfully. The validator must discover a listed NPI via a filtered (family) browse,
+    tolerate the non-Bundle head-check, and still validate it — without weakening either
+    trust gate."""
+    base = "https://needs-param.example/r4"
+    real_npi, real_pid = "1003815440", "P-123"
+    _prac = {"resourceType": "Practitioner", "id": real_pid,
+             "identifier": [{"system": _SYS, "value": real_npi}]}
+    _reject = httpx.Response(400, json={"resourceType": "OperationOutcome",
+                                        "issue": [{"severity": "error", "code": "processing"}]})
+
+    def practitioner_handler(request):
+        params = request.url.params
+        ident = params.get("identifier")
+        if ident is not None:  # two_step first leg — filters correctly by NPI
+            listed = ident.endswith(f"|{real_npi}")
+            return httpx.Response(200, json={"resourceType": "Bundle",
+                                             "total": 1 if listed else 0,
+                                             "entry": [{"resource": _prac}] if listed else []})
+        if params.get("family"):  # filtered discovery browse works
+            return httpx.Response(200, json={"resourceType": "Bundle", "entry": [{"resource": _prac}]})
+        return _reject  # unfiltered browse rejected (requires a search param)
+
+    def role_handler(request):
+        if request.url.params.get("practitioner") == f"Practitioner/{real_pid}":
+            return httpx.Response(200, json={"resourceType": "Bundle", "entry": [{"resource": _NET_ROLE}]})
+        return _reject  # unfiltered head-check browse is not a Bundle — must not disqualify
+
+    respx.get(f"{base}/Practitioner").mock(side_effect=practitioner_handler)
+    respx.get(f"{base}/PractitionerRole").mock(side_effect=role_handler)
+    with httpx.Client() as c:
+        res = verify_payers.probe(c, _ep(base, lookup_mode="two_step"))
+    assert res["status"] == "validated", res
+
+
+@respx.mock
 def test_validator_flags_gated_endpoint():
     base = "https://gated.example/r4"
     respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(401))

@@ -71,16 +71,39 @@ def _query(client: httpx.Client, base: str, resource: str, headers: dict[str, st
     return data if isinstance(data, dict) else {}
 
 
-def _discover_npi(client: httpx.Client, base: str, npi_system: str,
-                  headers: dict[str, str]) -> str | None:
-    """Pull a real, listed NPI from the directory's own /Practitioner page, to round-trip."""
-    data = _query(client, base, "Practitioner", headers, _count="10")
+# A handful of very common US family names, for directories that reject an unfiltered
+# Practitioner browse (require a search parameter). Only used to *discover* a real listed
+# NPI to round-trip; the trust decision is still the per-NPI check, not this browse.
+_DISCOVERY_FAMILIES = ("Smith", "Johnson", "Williams", "Jones", "Garcia", "Lee")
+
+
+def _first_npi(data: dict[str, Any], npi_system: str) -> str | None:
     for entry in data.get("entry") or []:
         for idt in (entry.get("resource") or {}).get("identifier") or []:
             system = idt.get("system", "") or ""
             value = (idt.get("value") or "").strip()
             if ("us-npi" in system or system == npi_system) and len(value) == 10 and value.isdigit():
                 return value
+    return None
+
+
+def _discover_npi(client: httpx.Client, base: str, npi_system: str,
+                  headers: dict[str, str]) -> str | None:
+    """Pull a real, listed NPI from the directory's own /Practitioner page, to round-trip.
+
+    Some compliant Da Vinci directories (e.g. Excellus) reject an unfiltered browse and
+    require a search parameter, so we fall back to filtered browses by common family name.
+    Each attempt is best-effort — a rejected shape just moves on to the next."""
+    attempts: list[dict[str, str]] = [{"_count": "10"}]
+    attempts += [{"family": fam, "_count": "10"} for fam in _DISCOVERY_FAMILIES]
+    for params in attempts:
+        try:
+            data = _query(client, base, "Practitioner", headers, **params)
+        except Exception:
+            continue
+        npi = _first_npi(data, npi_system)
+        if npi:
+            return npi
     return None
 
 
@@ -113,12 +136,19 @@ def probe(client: httpx.Client, e: PlanNetEndpoint) -> dict[str, Any]:
                           timeout=_TIMEOUT, follow_redirects=True)
         if head.status_code in (401, 403):
             return {"status": "gated", "total": None, "error": f"HTTP {head.status_code}"}
-        head.raise_for_status()
-        hd = head.json()
-        if not (isinstance(hd, dict) and hd.get("resourceType") == "Bundle"):
-            return {"status": "unusable", "total": None, "error": "response was not a FHIR Bundle"}
-        total = hd.get("total")
-        total = int(total) if isinstance(total, int) else None
+        # The unfiltered PractitionerRole browse is only for the informational Bundle.total.
+        # Some compliant directories reject it (require a search param) yet still answer the
+        # per-NPI lookup truthfully — so a non-Bundle head is NOT disqualifying. The trust
+        # decision is the bogus/real round-trip below; a non-FHIR endpoint fails that anyway
+        # (its per-NPI queries error or yield no in-network role), never validating.
+        total = None
+        try:
+            head.raise_for_status()
+            hd = head.json()
+            if isinstance(hd, dict) and hd.get("resourceType") == "Bundle" and isinstance(hd.get("total"), int):
+                total = int(hd["total"])
+        except Exception:
+            total = None
 
         # 2) bogus NPI must NOT be judged in-network (else the filter is ignored).
         bogus = _roles_for_npi(client, base, e.npi_system, _BOGUS_NPI, e.lookup_mode, headers)

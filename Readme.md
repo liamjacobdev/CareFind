@@ -41,13 +41,14 @@ The **validated public endpoints** in `app/planet_registry.py` are wired as *Con
 - a **bogus** NPI must *not* resolve in-network — otherwise the directory ignores the NPI filter and would mark everyone in-network (a fabricated *yes*; e.g. Connecticut's Medicaid directory does this);
 - a **real, listed** NPI must resolve in-network — otherwise per-NPI search returns nothing for everyone (a fabricated *no*; e.g. Premera and the reachable state-Medicaid directories do this).
 
-**Validated public endpoints** (live-checked 2026-06-24; see [docs/provenance.md](docs/provenance.md) for the full, auto-generated ledger including the tracked-but-not-wired ones):
+**Validated public endpoints** (live-checked through 2026-07-01; see [docs/provenance.md](docs/provenance.md) for the full, auto-generated ledger including the tracked-but-not-wired ones):
 
 | Payer (scope) | catalog id | Base URL | Round-trip |
 |---|---|---|---|
 | **UnitedHealthcare (national, commercial)** | `unitedhealthcare` | `https://flex.optum.com/fhirpublic/R4` | ✓ bogus→none, listed→active + network-linked (two-step) |
 | **Cigna (national, commercial)** | `cigna` | `https://p-hi2.digitaledge.cigna.com/ProviderDirectory/v1` | ✓ bogus→none, listed→active + network-linked |
 | **Humana (national, commercial)** | `humana` | `https://fhir.humana.com/api` | ✓ bogus→none, listed→active + network-linked (two-step) |
+| Excellus BlueCross BlueShield (NY, commercial) | `excellus` | `https://fhir.excellusbcbs.com/fhir/api` | ✓ bogus→none, listed→active + network-linked (two-step) |
 | Priority Partners — Johns Hopkins (MD Medicaid) | `priority_partners` | `https://api.jhhpfhir.com/r4/public-pp` | ✓ bogus→none, listed→in-network (Bundle 83,024) |
 
 > **Honest finding (the public set is small, but it now includes three of the top-five insurers).**
@@ -62,7 +63,12 @@ The **validated public endpoints** in `app/planet_registry.py` are wired as *Con
 > [CMS SMA-Endpoint-Directory](https://github.com/CMSgov/SMA-Endpoint-Directory) screened
 > here return a Bundle but **fail the per-NPI round-trip** (no network links, or empty
 > results for listed NPIs), so wiring them would fabricate answers. They stay **estimated**,
-> never verified. Because a live directory call is per-NPI, a verified payer is queried only
+> never verified. Beyond the nationals, regional Blues graduate the same way as they pass:
+> **Excellus BlueCross BlueShield** (NY) validates via the two-step path — its directory
+> requires a search parameter (rejecting an unfiltered browse), which the validator now
+> discovers around — and is wired **state-scoped to NY**, so it is never queried for, nor
+> fabricates an answer about, an out-of-state provider.
+> Because a live directory call is per-NPI, a verified payer is queried only
 > when you actually filter by it, never on an unfiltered search. The registry +
 > `verify_payers` make growing the set turnkey: an endpoint graduates to *Confirmed*
 > automatically the moment it passes — never by assertion.

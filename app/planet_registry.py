@@ -154,6 +154,23 @@ REGISTRY: list[PlanNetEndpoint] = [
              "NPI -> no Practitioner -> not in-network; a listed NPI -> active, "
              "network-linked role).",
     ),
+    # Regional Blue (Excellus BCBS, upstate/central/western NY, ~1.5M members). Public,
+    # unauthenticated Da Vinci PDEX Plan-Net. Its capability statement offers no chained
+    # `PractitionerRole?practitioner.identifier` search (and rejects an unfiltered browse),
+    # so it requires two_step: resolve Practitioner by NPI, then fetch its roles. Roles are
+    # active and carry network-reference extensions. State-scoped to NY (regional licensee,
+    # never mapped to a national `bcbs` id). NPI round-trip verified live 2026-07-01.
+    PlanNetEndpoint(
+        id="excellus", label="Excellus BlueCross BlueShield (NY)",
+        base_url="https://fhir.excellusbcbs.com/fhir/api", category="commercial",
+        states=["NY"], status="validated", last_checked="2026-07-01", lookup_mode="two_step",
+        note="Regional Blue (upstate/central/western NY). Public, unauthenticated Da Vinci "
+             "PDEX Plan-Net. No chained practitioner.identifier search and rejects an "
+             "unfiltered PractitionerRole/Practitioner browse, so it requires two_step "
+             "(resolve Practitioner by NPI via identifier=system|value, then fetch roles by "
+             "reference). NPI round-trip verified (bogus NPI -> no Practitioner -> not "
+             "in-network; a listed NPI -> active, network-linked role). State-scoped to NY.",
+    ),
 
     # ── Tracked but NOT wired — each fails the per-NPI usability bar for a documented
     # reason. Re-check with app/verify_payers.py; if a payer fixes its directory it
@@ -180,6 +197,21 @@ REGISTRY: list[PlanNetEndpoint] = [
              "listed NPI returns 0 roles — so per-NPI lookup yields only unknown/false. "
              "Stays an ESTIMATED catalog filter, never verified, until the directory "
              "supports network-linked per-NPI search.",
+    ),
+    # UNSAFE, same failure mode as CT below: reachable public Da Vinci Plan-Net that serves
+    # network-linked PractitionerRoles, but its identifier search is not honored — both the
+    # chained `practitioner.identifier` and the two_step `Practitioner?identifier` return the
+    # SAME first page for a bogus NPI as for a real one (the filter is ignored). Wiring it
+    # would mark every NY provider in-network (fabricated yes). Screened 2026-07-01; do not
+    # wire until it honors per-NPI identifier search.
+    PlanNetEndpoint(
+        id="bcbs_mn", label="Blue Cross Blue Shield of Minnesota",
+        base_url="https://api.bluecrossmn.com/fhir/provider", category="commercial",
+        states=["MN"], status="unusable",
+        note="UNSAFE: ignores the NPI identifier filter — a bogus NPI returns the same "
+             "providers as a real one (both chained and two_step), so wiring it would mark "
+             "everyone in-network (fabricated yes). Rejects system|value token syntax (400); "
+             "the bare-value form is honored syntactically but still ignores the filter.",
     ),
     PlanNetEndpoint(
         id="ct_medicaid", label="Connecticut Medicaid (HUSKY) directory",
