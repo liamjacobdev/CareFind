@@ -1,4 +1,4 @@
-# CareFind — operator runbook
+# InNetwork — operator runbook
 
 Deploy, ingest, back up, restore, and respond to incidents. Everything here runs on
 **free tiers**.
@@ -6,7 +6,7 @@ Deploy, ingest, back up, restore, and respond to incidents. Everything here runs
 ## Zero → running (target: < 15 min)
 
 ```bash
-git clone <repo> && cd carefind
+git clone <repo> && cd innetwork
 
 # Backend
 python -m venv .venv && . .venv/Scripts/activate     # or .venv/bin/activate
@@ -16,17 +16,17 @@ uvicorn app.main:app --port 8000                     # open http://localhost:800
 ```
 
 Verified FHIR Plan-Net endpoints (UnitedHealthcare, Cigna, Humana, Priority Partners) are
-wired out of the box. The frontend is prebuilt (`carefind.bundle.js` is committed); to rebuild after a
+wired out of the box. The frontend is prebuilt (`innetwork.bundle.js` is committed); to rebuild after a
 `src/` change: `npm install && npm run build`.
 
 **Production** (TLS + headers + real API origin):
 ```bash
 python configure_frontend.py https://api.yourdomain.com --claim-email you@real.com
-# rewrites carefind.config.js (apiBase/claimEmail) + the HTML CSP connect-src
+# rewrites innetwork.config.js (apiBase/claimEmail) + the HTML CSP connect-src
 docker compose up -d        # uvicorn (1 worker) behind Caddy (auto Let's Encrypt)
 ```
-Set env: `ALLOWED_ORIGINS`, `CAREFIND_TRUST_PROXY=true`, `CAREFIND_ADMIN_TOKEN`,
-`CAREFIND_UA=you@email`, and (for the cron) `CAREFIND_MEDICARE_INGEST_URL`.
+Set env: `ALLOWED_ORIGINS`, `INNETWORK_TRUST_PROXY=true`, `INNETWORK_ADMIN_TOKEN`,
+`INNETWORK_UA=you@email`, and (for the cron) `INNETWORK_MEDICARE_INGEST_URL`.
 
 > **Concrete $0 path:** [docs/deploy.md](deploy.md) leads with a **cardless, free Vercel**
 > deploy (one serverless function serves page + API; the Medicare index ships as a gzipped
@@ -38,7 +38,7 @@ Set env: `ALLOWED_ORIGINS`, `CAREFIND_TRUST_PROXY=true`, `CAREFIND_ADMIN_TOKEN`,
 ## Ingestion (no manual data steps)
 - **Automated:** the [scheduled-ingest cron](../.github/workflows/ingest.yml) POSTs the
   token-secured `/admin/ingest` — TiC monthly, Medicare quarterly. Set repo secrets
-  `CAREFIND_URL` + `CAREFIND_ADMIN_TOKEN` (+ `HEALTHCHECK_PING_URL` for the dead-man's switch).
+  `INNETWORK_URL` + `INNETWORK_ADMIN_TOKEN` (+ `HEALTHCHECK_PING_URL` for the dead-man's switch).
 - **Manual:** `python -m app.ingest_tic <payer> <toc-or-file-url>` (auto-discovers a TiC
   index) · `python -m app.ingest_medicare <csv-or-url>` · `python -m app.verify_payers`
   (re-validate Plan-Net endpoints + regenerate `docs/provenance.md`).
@@ -47,16 +47,16 @@ Set env: `ALLOWED_ORIGINS`, `CAREFIND_TRUST_PROXY=true`, `CAREFIND_ADMIN_TOKEN`,
   it; the ingest cron pings Healthchecks.io so a *missed* run alerts too.
 
 ## Backups & restore (tested)
-SQLite at `CAREFIND_DB` holds the Medicare/TiC indexes + caches. All of it is
+SQLite at `INNETWORK_DB` holds the Medicare/TiC indexes + caches. All of it is
 re-derivable from the public sources, so backup is cheap insurance, not a lifeline:
-take a **scheduled dump** — `sqlite3 $CAREFIND_DB ".backup backup.db"` on a cron (or
+take a **scheduled dump** — `sqlite3 $INNETWORK_DB ".backup backup.db"` on a cron (or
 call `app.db.backup()`) — and push it to any object store.
 
 **Restore drill** (run quarterly — the indexes are re-ingestable, so the real risk is
 config, not data loss):
 ```bash
-sqlite3 carefind.db ".backup /tmp/restore-test.db"   # take a backup
-CAREFIND_DB=/tmp/restore-test.db python -c "from app import db; print('medicare', db.medicare_count())"
+sqlite3 innetwork.db ".backup /tmp/restore-test.db"   # take a backup
+INNETWORK_DB=/tmp/restore-test.db python -c "from app import db; print('medicare', db.medicare_count())"
 ```
 A restored DB that reports the expected counts is a verified restore. Worst case, re-run
 the ingests — all data is re-derivable from the public sources.

@@ -1,7 +1,7 @@
 """Ingest a payer's Transparency-in-Coverage (TiC) in-network NPIs.
 
 Under the federal Transparency in Coverage rule, every commercial health plan must
-publish machine-readable in-network files. CareFind ingests the set of in-network
+publish machine-readable in-network files. InNetwork ingests the set of in-network
 NPIs for a given payer so that payer becomes a VERIFIED filter (a green "Confirmed"
 badge), exactly like Medicare. The payer id must match a catalog entry in
 app/catalog.py (e.g. "aetna", "cigna", "unitedhealthcare") so the verified ingest

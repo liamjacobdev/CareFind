@@ -20,7 +20,7 @@ from .sources import (
     _fhir_cache_fresh,
 )
 
-log = logging.getLogger("carefind.insurance")
+log = logging.getLogger("innetwork.insurance")
 
 class FhirPlanNetSource(InsuranceSource):
     """One configured payer's public FHIR Plan-Net Provider Directory (verified)."""

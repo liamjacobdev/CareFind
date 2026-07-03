@@ -8,10 +8,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # App code + the static frontend and seed data.
 COPY app/ ./app/
-COPY carefind.html carefind.logic.js payers.example.json sample_medicare.csv ./
+COPY innetwork.html innetwork.logic.js payers.example.json sample_medicare.csv ./
 
 # The SQLite DB (Medicare index + geocode cache) lives on a mounted volume.
-ENV CAREFIND_DB=/data/carefind.db
+ENV INNETWORK_DB=/data/innetwork.db
 VOLUME ["/data"]
 EXPOSE 8000
 
@@ -26,7 +26,7 @@ EXPOSE 8000
 # the env). We default it to 127.0.0.1 — the safe, deny-by-default value — rather
 # than the old "*", which trusted a spoofed XFF from ANY source that could reach the
 # port. docker-compose.yml overrides it with the *proxy network CIDR* so only the
-# Caddy container is trusted. Pair with CAREFIND_TRUST_PROXY=true (set in compose).
+# Caddy container is trusted. Pair with INNETWORK_TRUST_PROXY=true (set in compose).
 ENV FORWARDED_ALLOW_IPS=127.0.0.1
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", \
      "--proxy-headers"]

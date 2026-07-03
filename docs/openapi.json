@@ -74,7 +74,7 @@
     }
   },
   "info": {
-    "title": "CareFind API",
+    "title": "InNetwork API",
     "version": "3.1"
   },
   "openapi": "3.1.0",
@@ -97,7 +97,7 @@
     },
     "/admin/ingest": {
       "post": {
-        "description": "Token-secured refresh trigger for the scheduled ingest cron. Disabled (404) until\nCAREFIND_ADMIN_TOKEN is set; the ingest runs in the background so the cron returns\npromptly. Not under /api/, so it isn't rate-limited.",
+        "description": "Token-secured refresh trigger for the scheduled ingest cron. Disabled (404) until\nINNETWORK_ADMIN_TOKEN is set; the ingest runs in the background so the cron returns\npromptly. Not under /api/, so it isn't rate-limited.",
         "operationId": "admin_ingest_admin_ingest_post",
         "parameters": [
           {
@@ -657,102 +657,6 @@
         "summary": "Api Reverse"
       }
     },
-    "/carefind-icon.svg": {
-      "get": {
-        "operationId": "app_icon_carefind_icon_svg_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "App Icon"
-      }
-    },
-    "/carefind-og.svg": {
-      "get": {
-        "operationId": "og_image_carefind_og_svg_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Og Image"
-      }
-    },
-    "/carefind.bundle.js": {
-      "get": {
-        "operationId": "frontend_bundle_carefind_bundle_js_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Frontend Bundle"
-      }
-    },
-    "/carefind.config.js": {
-      "get": {
-        "operationId": "frontend_config_carefind_config_js_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Frontend Config"
-      }
-    },
-    "/carefind.logic.js": {
-      "get": {
-        "operationId": "frontend_logic_carefind_logic_js_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Frontend Logic"
-      }
-    },
-    "/carefind.theme.js": {
-      "get": {
-        "operationId": "frontend_theme_carefind_theme_js_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Frontend Theme"
-      }
-    },
     "/coverage": {
       "get": {
         "description": "Verified-coverage-by-state report (C4): which verified programs are available in\neach state, plus the verified-record counts. Computed live, so it reflects the\ncurrent data after every ingest.",
@@ -811,9 +715,105 @@
         "summary": "Healthz"
       }
     },
+    "/innetwork-icon.svg": {
+      "get": {
+        "operationId": "app_icon_innetwork_icon_svg_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "App Icon"
+      }
+    },
+    "/innetwork-og.svg": {
+      "get": {
+        "operationId": "og_image_innetwork_og_svg_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Og Image"
+      }
+    },
+    "/innetwork.bundle.js": {
+      "get": {
+        "operationId": "frontend_bundle_innetwork_bundle_js_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Frontend Bundle"
+      }
+    },
+    "/innetwork.config.js": {
+      "get": {
+        "operationId": "frontend_config_innetwork_config_js_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Frontend Config"
+      }
+    },
+    "/innetwork.logic.js": {
+      "get": {
+        "operationId": "frontend_logic_innetwork_logic_js_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Frontend Logic"
+      }
+    },
+    "/innetwork.theme.js": {
+      "get": {
+        "operationId": "frontend_theme_innetwork_theme_js_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Frontend Theme"
+      }
+    },
     "/metrics": {
       "get": {
-        "description": "In-process operational metrics: request counts by status, geocode/FHIR/NPPES\ncache hit rates, and upstream error count. Protected by the admin token when one is\nconfigured (set CAREFIND_ADMIN_TOKEN in production); open in dev when unset.",
+        "description": "In-process operational metrics: request counts by status, geocode/FHIR/NPPES\ncache hit rates, and upstream error count. Protected by the admin token when one is\nconfigured (set INNETWORK_ADMIN_TOKEN in production); open in dev when unset.",
         "operationId": "metrics_endpoint_metrics_get",
         "parameters": [
           {

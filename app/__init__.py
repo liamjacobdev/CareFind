@@ -1,1 +1,1 @@
-"""CareFind backend package."""
+"""InNetwork backend package."""

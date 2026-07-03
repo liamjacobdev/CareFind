@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CareFind — Find licensed US healthcare providers from the official CMS registry</title>
+  <title>InNetwork — Find licensed US healthcare providers from the official CMS registry</title>
   <meta name="description" content="Search 8M+ licensed US healthcare providers from the official CMS NPPES registry, and confirm Medicare acceptance nationwide from the official CMS enrollment file. Real records, no login, no fabricated insurance answers." />
 
   <!-- Defense-in-depth (D3). script-src has NO 'unsafe-inline': all JS is external,
@@ -18,42 +18,42 @@
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;
     font-src https://fonts.gstatic.com data:;
     img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org;
-    connect-src 'self' https://care-find-lac.vercel.app https://npiregistry.cms.hhs.gov https://nominatim.openstreetmap.org;
+    connect-src 'self' https://innetwork.vercel.app https://npiregistry.cms.hhs.gov https://nominatim.openstreetmap.org;
     base-uri 'none'; object-src 'none'; frame-ancestors 'self';" />
 
-  <link rel="canonical" href="https://care-find-lac.vercel.app/" />
+  <link rel="canonical" href="https://innetwork.vercel.app/" />
   <meta name="robots" content="index, follow, max-image-preview:large" />
-  <meta property="og:title" content="CareFind — official US provider registry search" />
+  <meta property="og:title" content="InNetwork — official US provider registry search" />
   <meta property="og:description" content="Search 8M+ licensed US healthcare providers from the official CMS NPPES registry, with verified Medicare acceptance nationwide. Real records, mapped locations, no login." />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://care-find-lac.vercel.app/" />
-  <meta property="og:site_name" content="CareFind" />
-  <meta property="og:image" content="https://care-find-lac.vercel.app/carefind-og.svg" />
+  <meta property="og:url" content="https://innetwork.vercel.app/" />
+  <meta property="og:site_name" content="InNetwork" />
+  <meta property="og:image" content="https://innetwork.vercel.app/innetwork-og.svg" />
   <meta property="og:image:type" content="image/svg+xml" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="CareFind — search the official US CMS provider registry with verified insurance." />
+  <meta property="og:image:alt" content="InNetwork — search the official US CMS provider registry with verified insurance." />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="CareFind — official US provider registry search" />
+  <meta name="twitter:title" content="InNetwork — official US provider registry search" />
   <meta name="twitter:description" content="Search 8M+ licensed US providers from the official CMS registry, with verified Medicare & payer acceptance. No login." />
-  <meta name="twitter:image" content="https://care-find-lac.vercel.app/carefind-og.svg" />
+  <meta name="twitter:image" content="https://innetwork.vercel.app/innetwork-og.svg" />
   <link rel="preconnect" href="https://unpkg.com" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <!-- Fetch the app's own scripts in parallel with the render-blocking font CSS (they load
        at body-end, so without this they'd wait for parse). Only the weights actually used
        are requested (Fraunces 500/600/700 for display; Jakarta 400–700 for UI). -->
-  <link rel="preload" href="carefind.config.js" as="script" />
-  <link rel="preload" href="carefind.bundle.js" as="script" />
+  <link rel="preload" href="innetwork.config.js" as="script" />
+  <link rel="preload" href="innetwork.bundle.js" as="script" />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 36 36'%3E%3Cpath d='M18 2C11.4 2 6 7.3 6 13.9 6 22.6 18 34 18 34s12-11.4 12-20.1C30 7.3 24.6 2 18 2Z' fill='%230f7a5f'/%3E%3Cpath d='M18 9.2v9.4M13.3 13.9h9.4' stroke='%23fff' stroke-width='3.1' stroke-linecap='round'/%3E%3C/svg%3E" />
   <meta name="theme-color" content="#0d241d" />
-  <link rel="apple-touch-icon" href="/carefind-icon.svg" />
+  <link rel="apple-touch-icon" href="/innetwork-icon.svg" />
   <!-- Pre-paint theme init (external + same-origin → no inline script, CSP stays strict). -->
-  <script src="carefind.theme.js"></script>
+  <script src="innetwork.theme.js"></script>
 
   <script type="application/ld+json">
-  {"@context":"https://schema.org","@type":"WebApplication","name":"CareFind","applicationCategory":"HealthApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"Search the official US CMS NPPES registry of licensed healthcare providers by location, specialty, or name."}
+  {"@context":"https://schema.org","@type":"WebApplication","name":"InNetwork","applicationCategory":"HealthApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"description":"Search the official US CMS NPPES registry of licensed healthcare providers by location, specialty, or name."}
   </script>
 
   <style>
@@ -378,10 +378,10 @@
   .marker-pin.active { width:34px; height:34px; box-shadow:0 6px 18px rgba(12,31,26,.55),inset 0 2px 4px rgba(255,255,255,.4),inset 0 -2px 5px rgba(0,0,0,.2),0 0 0 5px rgba(15,122,95,.18); z-index:1000; }
   .marker-pin::after { content:''; width:8px; height:8px; background:#fff; border-radius:50%; transform:rotate(45deg); }
   .center-pin { width:18px; height:18px; border-radius:50%; background:var(--ink-strong); border:3px solid #fff; box-shadow:0 2px 7px rgba(12,31,26,.4); }
-  .carefind-popup .leaflet-popup-content-wrapper { border-radius:var(--r-md); box-shadow:var(--shadow-lg); border:1px solid var(--border); background:var(--surface); color:var(--text); }
-  .carefind-popup .leaflet-popup-tip { box-shadow:var(--shadow-md); background:var(--surface); }
-  .carefind-popup a.leaflet-popup-close-button { color:var(--faint); }
-  .carefind-popup .leaflet-popup-content { margin:12px 14px; font-family:'Plus Jakarta Sans',sans-serif; }
+  .innetwork-popup .leaflet-popup-content-wrapper { border-radius:var(--r-md); box-shadow:var(--shadow-lg); border:1px solid var(--border); background:var(--surface); color:var(--text); }
+  .innetwork-popup .leaflet-popup-tip { box-shadow:var(--shadow-md); background:var(--surface); }
+  .innetwork-popup a.leaflet-popup-close-button { color:var(--faint); }
+  .innetwork-popup .leaflet-popup-content { margin:12px 14px; font-family:'Plus Jakarta Sans',sans-serif; }
   /* Theme Leaflet's own chrome (zoom control + attribution) so it matches the surface
      tokens in both light and dark — Leaflet ships hard white/black, which clashes on the
      dark map. */
@@ -584,7 +584,7 @@
           <path d="M18 9.2v9.4M13.3 13.9h9.4" stroke="#fff" stroke-width="3.1" stroke-linecap="round"/>
           <defs><linearGradient id="g" x1="6" y1="2" x2="30" y2="34" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
         </svg>
-        <span class="brand-name display">Care<em>Find</em></span>
+        <span class="brand-name display">In<em>Network</em></span>
         <span class="credential"><span class="dot"></span>Live national registry</span>
       </div>
       <div class="header-right">
@@ -698,7 +698,7 @@
 
         <p class="data-note">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-          <span><b>Every record is real</b>, pulled live from the official CMS NPPES registry and shown exactly as filed. Map pins are geocoded from each provider's listed address. <b>Medicare acceptance is verified nationwide</b> against the official CMS enrollment file — providers it lists carry a <b>Confirmed</b> badge; other plans show as <b>Likely</b> (estimated — confirm with the provider), never as confirmed. <b>Your searches stay private</b>: they go only to your CareFind backend or the official registries, never to third-party proxies.</span>
+          <span><b>Every record is real</b>, pulled live from the official CMS NPPES registry and shown exactly as filed. Map pins are geocoded from each provider's listed address. <b>Medicare acceptance is verified nationwide</b> against the official CMS enrollment file — providers it lists carry a <b>Confirmed</b> badge; other plans show as <b>Likely</b> (estimated — confirm with the provider), never as confirmed. <b>Your searches stay private</b>: they go only to your InNetwork backend or the official registries, never to third-party proxies.</span>
         </p>
       </div>
 
@@ -762,7 +762,7 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
     <h2 class="display" id="claim-title">Claim your profile</h2>
-    <p>CareFind is free for patients. Providers and practices can claim their listing to add booking links, accepted plans, hours, and photos — that's how CareFind sustains itself, never by charging the people searching for care.</p>
+    <p>InNetwork is free for patients. Providers and practices can claim their listing to add booking links, accepted plans, hours, and photos — that's how InNetwork sustains itself, never by charging the people searching for care.</p>
     <a class="action-btn primary" id="claim-link" href="#" style="width:100%; text-decoration:none;">Request to claim this listing</a>
     <p style="margin:12px 0 0; font-size:.72rem;">Listings always show the official CMS record first. Claimed details are clearly marked as provider-supplied.</p>
   </div>
@@ -776,7 +776,7 @@
 <!-- Deployment config (data only) + the app bundle. Both are external same-origin
      scripts, so this HTML carries no inline executable script and the CSP forbids
      'unsafe-inline' for script-src. -->
-<script src="carefind.config.js"></script>
-<script src="carefind.bundle.js"></script>
+<script src="innetwork.config.js"></script>
+<script src="innetwork.bundle.js"></script>
 </body>
 </html>

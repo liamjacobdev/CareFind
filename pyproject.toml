@@ -5,7 +5,7 @@
 # them intact rather than fighting the style. The linter still enforces real issues.
 line-length = 120
 target-version = "py312"
-extend-exclude = ["carefind.bundle.js"]
+extend-exclude = ["innetwork.bundle.js"]
 
 [tool.ruff.lint]
 # Real-bug + hygiene rules: pyflakes (F), pycodestyle (E/W), import order (I),

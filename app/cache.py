@@ -2,7 +2,7 @@
 
 Default is an in-process TTL cache (per-worker). For shared warmth across workers,
 provide a Redis-backed implementation satisfying the same protocol and select it via
-CAREFIND_CACHE (see build_cache). Used by the short-TTL NPPES result cache (C4).
+INNETWORK_CACHE (see build_cache). Used by the short-TTL NPPES result cache (C4).
 """
 import threading
 import time

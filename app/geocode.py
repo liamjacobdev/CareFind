@@ -5,7 +5,7 @@ Source chain (server-side):
      This is the default so a fresh install has working map pins/distances with no
      configuration at all.
   2. OpenStreetMap Nominatim — fallback. Free but its usage policy requires a real
-     contact email in the User-Agent (set CAREFIND_UA) and max ~1 req/sec, so it is
+     contact email in the User-Agent (set INNETWORK_UA) and max ~1 req/sec, so it is
      politely throttled. Used only when Census misses or is disabled.
 
 A single browser request to /api/providers/search geocodes a whole page of results
@@ -24,7 +24,7 @@ import httpx
 from . import db, metrics
 from .config import settings
 
-log = logging.getLogger("carefind.geocode")
+log = logging.getLogger("innetwork.geocode")
 
 # [lat, lon]. A list (not a tuple) because it round-trips through JSON and the cache.
 Coords = list[float]
@@ -201,7 +201,7 @@ def _rev_key(lat: float, lon: float) -> str:
 
 async def _census_reverse(client: httpx.AsyncClient, lat: float, lon: float) -> str:
     """Keyless ZIP lookup via the Census geographies/coordinates benchmark — mirrors
-    the forward Census path so 'Near me' works out of the box with no CAREFIND_UA.
+    the forward Census path so 'Near me' works out of the box with no INNETWORK_UA.
     The ZIP Code Tabulation Area (ZCTA5) is the ZIP for this point."""
     resp = await client.get(
         settings.census_base + "/geocoder/geographies/coordinates",

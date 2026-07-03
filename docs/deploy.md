@@ -1,6 +1,6 @@
-# Deploy CareFind for $0 — cardless, on Vercel
+# Deploy InNetwork for $0 — cardless, on Vercel
 
-This is the **cardless, free** deployment path: CareFind runs as a single Vercel Python
+This is the **cardless, free** deployment path: InNetwork runs as a single Vercel Python
 serverless function that serves both the page and the API (same origin → no CORS), with
 the 2.5M-row Medicare index shipped as a gzipped SQLite seed in the deployment. No credit
 card, no database service, no separate frontend host.
@@ -8,11 +8,11 @@ card, no database service, no separate frontend host.
 ## Why this works (first principles)
 
 Vercel functions have a **read-only bundle filesystem** and an **ephemeral, writable
-`/tmp`**. CareFind's data path — Medicare/TiC acceptance lookups — is **read-only at serve
+`/tmp`**. InNetwork's data path — Medicare/TiC acceptance lookups — is **read-only at serve
 time**, so we don't need a managed database at all:
 
-- The seed `carefind.db.gz` (~27 MB) ships in the deployment; `api/index.py` inflates it
-  to `/tmp/carefind.db` once per cold start (~98 MB, well under `/tmp`'s 512 MB).
+- The seed `innetwork.db.gz` (~27 MB) ships in the deployment; `api/index.py` inflates it
+  to `/tmp/innetwork.db` once per cold start (~98 MB, well under `/tmp`'s 512 MB).
 - The few cache writes (FHIR/geocode) then land in that writable `/tmp` copy — ephemeral
   per instance, which is fine (they're best-effort and re-derivable).
 - Geocoding uses the **keyless US Census geocoder** (no API key, no rate limit), so the
@@ -27,11 +27,11 @@ limit. Everything is verified locally via the cold-start simulation in the repo 
 
 1. **Create a free Vercel account** at https://vercel.com (GitHub login; no card for the
    Hobby plan).
-2. **Push this repo to GitHub** (the `carefind.db.gz` seed is committed, so the deploy is
+2. **Push this repo to GitHub** (the `innetwork.db.gz` seed is committed, so the deploy is
    self-contained). On Vercel: **Add New → Project → import the repo**. Vercel detects
    `vercel.json` + `api/index.py` and the Python runtime automatically; click Deploy.
 3. **Point the page at your URL once.** After the first deploy you know your origin
-   (`https://<project>.vercel.app`). Vercel serves `carefind.config.js` as a *static* CDN
+   (`https://<project>.vercel.app`). Vercel serves `innetwork.config.js` as a *static* CDN
    asset (it bypasses the app's same-origin route), so bake the origin in and push:
    ```bash
    python configure_frontend.py https://<project>.vercel.app
@@ -39,11 +39,11 @@ limit. Everything is verified locally via the cold-start simulation in the repo 
    ```
    This is a one-time step; the redeploy serves the corrected config. (A separately-hosted
    frontend or the Docker self-host instead uses the app's automatic same-origin route via
-   `CAREFIND_SAME_ORIGIN`; on Vercel the static-asset serving makes baking the simpler path.)
-4. (Optional) In **Settings → Environment Variables**, set `CAREFIND_UA` to a real contact
+   `INNETWORK_SAME_ORIGIN`; on Vercel the static-asset serving makes baking the simpler path.)
+4. (Optional) In **Settings → Environment Variables**, set `INNETWORK_UA` to a real contact
    email (identifies you to NPPES; only needed if you later enable the Nominatim fallback).
 
-The same function serves `/` and `/api/*`; `carefind.bundle.js`/`config.js` are served as
+The same function serves `/` and `/api/*`; `innetwork.bundle.js`/`config.js` are served as
 static assets.
 
 ## Verify it's live
@@ -62,7 +62,7 @@ The seed is a point-in-time snapshot. **It refreshes itself**:
 [`.github/workflows/refresh-medicare-seed.yml`](../.github/workflows/refresh-medicare-seed.yml)
 runs quarterly (and on demand via *Actions → Refresh Medicare seed → Run workflow*). It
 auto-discovers the current CMS enrollment CSV from `data.cms.gov`'s DCAT catalog (no
-hard-coded dated URL), rebuilds `carefind.db.gz`, and commits it **only if it changed** —
+hard-coded dated URL), rebuilds `innetwork.db.gz`, and commits it **only if it changed** —
 which triggers Vercel's GitHub integration to redeploy. No secrets needed (just the
 default `GITHUB_TOKEN`).
 
@@ -70,8 +70,8 @@ To refresh manually instead:
 
 ```bash
 python -c "from app.cms_catalog import latest_medicare_csv_url as u; print(u())"  # current CSV
-python -m app.ingest_medicare "<that-url>"                 # rebuild ./carefind.db
-gzip -9 -c carefind.db > carefind.db.gz                    # rebuild the seed
+python -m app.ingest_medicare "<that-url>"                 # rebuild ./innetwork.db
+gzip -9 -c innetwork.db > innetwork.db.gz                    # rebuild the seed
 git commit -am "data: refresh Medicare seed" && git push  # Vercel auto-redeploys
 ```
 

@@ -1,6 +1,6 @@
 # Auto-refresh the baked Medicare seed for the cardless Vercel deploy (docs/deploy.md).
 #
-# The Vercel deployment serves a read-only SQLite seed (carefind.db.gz) baked into the
+# The Vercel deployment serves a read-only SQLite seed (innetwork.db.gz) baked into the
 # repo. CMS republishes the Medicare Fee-For-Service enrollment file quarterly, so this
 # workflow rebuilds the seed from the *current* CSV (auto-discovered from data.cms.gov's
 # DCAT catalog — no hard-coded dated URL) and commits it. The push triggers Vercel's
@@ -56,23 +56,23 @@ jobs:
 
       - name: Rebuild the SQLite index from the current CSV
         env:
-          CAREFIND_DB: ./carefind.db
+          INNETWORK_DB: ./innetwork.db
         run: |
-          rm -f carefind.db
+          rm -f innetwork.db
           python -m app.ingest_medicare "${{ steps.url.outputs.csv }}"
           python -c "from app import db; n=db.medicare_count(); print('medicare rows:', n); assert n > 1_000_000, 'suspiciously few rows — refusing to ship'"
 
       - name: Compress to the deploy seed
-        run: gzip -9 -c carefind.db > carefind.db.gz
+        run: gzip -9 -c innetwork.db > innetwork.db.gz
 
       - name: Commit the seed if it changed
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- carefind.db.gz; then
+          if git diff --quiet -- innetwork.db.gz; then
             echo "Seed unchanged this quarter — nothing to commit."
           else
-            git add carefind.db.gz
+            git add innetwork.db.gz
             git commit -m "data: refresh Medicare seed (auto)"
             git push
             echo "Pushed a refreshed seed — Vercel will redeploy."

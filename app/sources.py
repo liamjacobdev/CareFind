@@ -15,7 +15,7 @@ from typing import Any
 from . import db
 from .config import settings
 
-log = logging.getLogger("carefind.insurance")
+log = logging.getLogger("innetwork.insurance")
 
 # A single source's answer for one (provider, plan): in-network / not / unknown.
 Answer = bool | None

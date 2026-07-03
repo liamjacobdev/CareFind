@@ -1,6 +1,6 @@
-# CareFind — architecture
+# InNetwork — architecture
 
-CareFind answers one question — *"which licensed providers near me take my insurance,
+InNetwork answers one question — *"which licensed providers near me take my insurance,
 and can I act on it now?"* — from **free, public data only**, and never claims more than
 a real source supports.
 
@@ -8,10 +8,10 @@ a real source supports.
 
 ```
                     ┌─────────────────────────────────────────────┐
-   Browser          │  carefind.html  (CSP, no inline script)      │
-                    │  ├─ carefind.config.js   (injected config)   │
-                    │  ├─ carefind.bundle.js   (esbuild ← src/)    │
-                    │  └─ carefind.logic.js    (pure, unit-tested) │
+   Browser          │  innetwork.html  (CSP, no inline script)      │
+                    │  ├─ innetwork.config.js   (injected config)   │
+                    │  ├─ innetwork.bundle.js   (esbuild ← src/)    │
+                    │  └─ innetwork.logic.js    (pure, unit-tested) │
                     └───────────────┬─────────────────────────────┘
                                     │ same-origin /api/* (CORS-locked, rate-limited)
                     ┌───────────────▼─────────────────────────────┐

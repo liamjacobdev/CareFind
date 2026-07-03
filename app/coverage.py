@@ -6,7 +6,7 @@ verified-NPI counts behind them. Computed live from the registry + datastore, so
 always reflects the current data — it "regenerates" on every ingest automatically.
 
 Deliberately honest about what it is NOT: it is *availability of verified programs by
-state* and *counts of verified records*, not a "% of providers covered" — CareFind
+state* and *counts of verified records*, not a "% of providers covered" — InNetwork
 holds no per-state provider denominator (NPPES is queried live), so a coverage
 percentage would be fabricated. We report only what the data supports.
 """
@@ -20,7 +20,7 @@ from . import db
 if TYPE_CHECKING:
     from .insurance import Registry
 
-# The states/territories CareFind recognizes (mirrors the frontend's US_STATES).
+# The states/territories InNetwork recognizes (mirrors the frontend's US_STATES).
 STATES: tuple[str, ...] = (
     "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN",
     "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV",

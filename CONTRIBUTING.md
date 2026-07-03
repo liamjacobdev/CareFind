@@ -1,4 +1,4 @@
-# Contributing to CareFind
+# Contributing to InNetwork
 
 Thanks for helping make provider + insurance search more trustworthy. The guiding
 principle: **never show a user something we can't stand behind.** A silent failure or
@@ -44,8 +44,8 @@ mypy                       # strict type-check (config in pyproject.toml)
 pytest -q                  # backend tests
 
 npm install                # frontend tooling
-npm run build              # esbuild: src/ -> carefind.bundle.js (committed; CI diffs it)
-npm test                   # Vitest unit tests (carefind.logic.js), enforces coverage
+npm run build              # esbuild: src/ -> innetwork.bundle.js (committed; CI diffs it)
+npm test                   # Vitest unit tests (innetwork.logic.js), enforces coverage
 npm run test:e2e           # Playwright smoke (needs: npx playwright install chromium)
 ```
 
@@ -55,7 +55,7 @@ Run the app with `python -m uvicorn app.main:app --port 8000` and open
 ## Tests
 
 - **Backend** (`tests/`, pytest): keep it green; new behavior needs coverage.
-- **Frontend logic** (`tests-js/`, Vitest): pure functions live in `carefind.logic.js`
+- **Frontend logic** (`tests-js/`, Vitest): pure functions live in `innetwork.logic.js`
   — the single source of truth shared with the page. Coverage threshold is enforced.
 - **Cross-language parity** (`tests/fixtures/normalize_golden.json`): the backend
   `normalize()` and the frontend `buildProviders()` must agree field-for-field. If you
@@ -70,7 +70,7 @@ never weaken a gate to pass (fix the cause):
 - **ruff** lint + **mypy `--strict`** on `app/` (zero errors).
 - **pytest**, **Vitest** (coverage threshold), **Playwright** e2e.
 - **Reproducible build**: `npm run build` must reproduce the committed
-  `carefind.bundle.js` byte-for-byte (`git diff --exit-code`). Edit `src/`, never the bundle.
+  `innetwork.bundle.js` byte-for-byte (`git diff --exit-code`). Edit `src/`, never the bundle.
 - **$0 security scanning**: `pip-audit` (shipped Python deps) and `npm audit --omit=dev`
   (shipped npm surface — the app ships no runtime npm deps), **gitleaks** (committed
   secrets), and **CodeQL** (`.github/workflows/codeql.yml`, Python + JS). **Dependabot**

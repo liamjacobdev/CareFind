@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Configure + launch CareFind on a fresh VM (Oracle Cloud Always Free + DuckDNS path).
+# Configure + launch InNetwork on a fresh VM (Oracle Cloud Always Free + DuckDNS path).
 # See docs/deploy.md. Idempotent: safe to re-run. Run from the repo root on the VM.
 #
-#   DUCKDNS_NAME=carefind \
+#   DUCKDNS_NAME=innetwork \
 #   DUCKDNS_TOKEN=xxxx \
 #   CONTACT_EMAIL=you@example.com \
 #   ADMIN_TOKEN="$(openssl rand -hex 32)" \
@@ -10,7 +10,7 @@
 #   bash deploy/setup.sh
 set -euo pipefail
 
-: "${DUCKDNS_NAME:?set DUCKDNS_NAME (e.g. carefind for carefind.duckdns.org)}"
+: "${DUCKDNS_NAME:?set DUCKDNS_NAME (e.g. innetwork for innetwork.duckdns.org)}"
 : "${DUCKDNS_TOKEN:?set DUCKDNS_TOKEN (from duckdns.org)}"
 : "${CONTACT_EMAIL:?set CONTACT_EMAIL (real email; identifies you to NPPES/Nominatim)}"
 : "${ADMIN_TOKEN:?set ADMIN_TOKEN (e.g. \$(openssl rand -hex 32))}"
@@ -30,13 +30,13 @@ echo "==> 2/5 Write .env"
 cat > .env <<EOF
 ALLOWED_ORIGINS=${ORIGIN}
 GEOCODE_USE_CENSUS=true
-CAREFIND_UA=CareFind/3.1 (+${ORIGIN}; contact: ${CONTACT_EMAIL})
+INNETWORK_UA=InNetwork/3.1 (+${ORIGIN}; contact: ${CONTACT_EMAIL})
 RATE_LIMIT_MAX=60
 RATE_LIMIT_WINDOW=60
-CAREFIND_TRUST_PROXY=true
+INNETWORK_TRUST_PROXY=true
 GEOCODE_MIN_INTERVAL=1.0
-CAREFIND_PAYERS=payers.json
-CAREFIND_ADMIN_TOKEN=${ADMIN_TOKEN}
+INNETWORK_PAYERS=payers.json
+INNETWORK_ADMIN_TOKEN=${ADMIN_TOKEN}
 EOF
 echo "    wrote .env (ALLOWED_ORIGINS=${ORIGIN})"
 

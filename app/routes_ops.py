@@ -12,7 +12,7 @@ from .config import settings
 from .insurance import registry
 
 router = APIRouter()
-log = logging.getLogger("carefind")
+log = logging.getLogger("innetwork")
 
 
 def _data_freshness() -> dict[str, Any]:
@@ -71,7 +71,7 @@ def _trigger_ingest(source: str) -> None:
             if settings.medicare_ingest_url:
                 ingest_medicare.ingest(settings.medicare_ingest_url)
             else:
-                log.warning("admin ingest: medicare skipped — CAREFIND_MEDICARE_INGEST_URL unset")
+                log.warning("admin ingest: medicare skipped — INNETWORK_MEDICARE_INGEST_URL unset")
     except SystemExit as e:  # ingest_tic_job.run() exits when no sources are configured
         log.warning("admin ingest (%s) ended early: %s", source, e)
     except Exception:
@@ -85,10 +85,10 @@ def admin_ingest(
     authorization: str = Header(default=""),
 ) -> dict[str, Any]:
     """Token-secured refresh trigger for the scheduled ingest cron. Disabled (404) until
-    CAREFIND_ADMIN_TOKEN is set; the ingest runs in the background so the cron returns
+    INNETWORK_ADMIN_TOKEN is set; the ingest runs in the background so the cron returns
     promptly. Not under /api/, so it isn't rate-limited."""
     if not settings.admin_token:
-        raise HTTPException(404, "Admin ingest is disabled (set CAREFIND_ADMIN_TOKEN).")
+        raise HTTPException(404, "Admin ingest is disabled (set INNETWORK_ADMIN_TOKEN).")
     if authorization != f"Bearer {settings.admin_token}":
         raise HTTPException(403, "Invalid or missing admin token.")
     if source not in ("all", "tic", "medicare"):
@@ -101,7 +101,7 @@ def admin_ingest(
 def metrics_endpoint(authorization: str = Header(default="")) -> dict[str, Any]:
     """In-process operational metrics: request counts by status, geocode/FHIR/NPPES
     cache hit rates, and upstream error count. Protected by the admin token when one is
-    configured (set CAREFIND_ADMIN_TOKEN in production); open in dev when unset."""
+    configured (set INNETWORK_ADMIN_TOKEN in production); open in dev when unset."""
     if settings.admin_token and authorization != f"Bearer {settings.admin_token}":
         raise HTTPException(403, "Metrics require the admin token.")
     return metrics.snapshot()

@@ -47,7 +47,7 @@ jobs:
         run: npm run build
 
       - name: Verify committed bundle matches src/ (reproducible build)
-        run: git diff --exit-code carefind.bundle.js
+        run: git diff --exit-code innetwork.bundle.js
 
       - name: Lint (eslint)
         run: npm run lint

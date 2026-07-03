@@ -2,9 +2,9 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-carefind.db
-carefind.db-wal
-carefind.db-shm
+innetwork.db
+innetwork.db-wal
+innetwork.db-shm
 payers.json
 tic_sources.json
 .env

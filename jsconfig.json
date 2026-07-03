@@ -10,5 +10,5 @@
     "noImplicitAny": false,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.js", "carefind.logic.js", "carefind.config.js", "build.mjs", "types/**/*.d.ts"]
+  "include": ["src/**/*.js", "innetwork.logic.js", "innetwork.config.js", "build.mjs", "types/**/*.d.ts"]
 }

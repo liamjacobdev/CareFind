@@ -12,15 +12,15 @@ from .config import settings
 router = APIRouter()
 
 
-_FRONTEND = Path(__file__).resolve().parent.parent / "carefind.html"
+_FRONTEND = Path(__file__).resolve().parent.parent / "innetwork.html"
 
 
-_FRONTEND_LOGIC = _FRONTEND.parent / "carefind.logic.js"
-_FRONTEND_BUNDLE = _FRONTEND.parent / "carefind.bundle.js"
-_FRONTEND_CONFIG = _FRONTEND.parent / "carefind.config.js"
-_FRONTEND_THEME = _FRONTEND.parent / "carefind.theme.js"
-_ICON = _FRONTEND.parent / "carefind-icon.svg"
-_OG_IMAGE = _FRONTEND.parent / "carefind-og.svg"
+_FRONTEND_LOGIC = _FRONTEND.parent / "innetwork.logic.js"
+_FRONTEND_BUNDLE = _FRONTEND.parent / "innetwork.bundle.js"
+_FRONTEND_CONFIG = _FRONTEND.parent / "innetwork.config.js"
+_FRONTEND_THEME = _FRONTEND.parent / "innetwork.theme.js"
+_ICON = _FRONTEND.parent / "innetwork-icon.svg"
+_OG_IMAGE = _FRONTEND.parent / "innetwork-og.svg"
 
 
 def _static_file(request: Request, path: Path, media_type: str, missing: str) -> Response:
@@ -41,7 +41,7 @@ def _static_file(request: Request, path: Path, media_type: str, missing: str) ->
 @router.get("/")
 def index(request: Request) -> Response:
     return _static_file(request, _FRONTEND, "text/html",
-                        "Frontend (carefind.html) not found next to the app package.")
+                        "Frontend (innetwork.html) not found next to the app package.")
 
 
 def _request_origin(request: Request) -> str:
@@ -54,10 +54,10 @@ def _request_origin(request: Request) -> str:
     return f"{proto}://{host}" if host else ""
 
 
-@router.get("/carefind.config.js")
+@router.get("/innetwork.config.js")
 def frontend_config(request: Request) -> Response:
     # Deployment config (data only), external so the page has no inline script (D3).
-    # When the same process serves page + API (CAREFIND_SAME_ORIGIN, e.g. on Vercel),
+    # When the same process serves page + API (INNETWORK_SAME_ORIGIN, e.g. on Vercel),
     # rewrite apiBase to the request's own origin so a fresh deploy works on first load
     # with no configure_frontend step. CSP 'self' already covers same-origin API calls.
     if settings.same_origin_frontend and _FRONTEND_CONFIG.exists():
@@ -68,44 +68,44 @@ def frontend_config(request: Request) -> Response:
             return Response(body, media_type="application/javascript",
                             headers={"Cache-Control": "no-store"})
     return _static_file(request, _FRONTEND_CONFIG, "application/javascript",
-                        "carefind.config.js not found next to the app package.")
+                        "innetwork.config.js not found next to the app package.")
 
 
-@router.get("/carefind.theme.js")
+@router.get("/innetwork.theme.js")
 def frontend_theme(request: Request) -> Response:
     # Pre-paint theme init (data-theme from saved choice / OS), in <head> so dark-mode
     # users see no flash of light. External + same-origin to keep the strict CSP.
     return _static_file(request, _FRONTEND_THEME, "application/javascript",
-                        "carefind.theme.js not found next to the app package.")
+                        "innetwork.theme.js not found next to the app package.")
 
 
-@router.get("/carefind.bundle.js")
+@router.get("/innetwork.bundle.js")
 def frontend_bundle(request: Request) -> Response:
     # The page's interactive layer, bundled from src/ by `npm run build` (esbuild).
     return _static_file(request, _FRONTEND_BUNDLE, "application/javascript",
-                        "carefind.bundle.js not found — run `npm run build`.")
+                        "innetwork.bundle.js not found — run `npm run build`.")
 
 
-@router.get("/carefind.logic.js")
+@router.get("/innetwork.logic.js")
 def frontend_logic(request: Request) -> Response:
-    # The shared pure logic module — a build input (bundled into carefind.bundle.js)
+    # The shared pure logic module — a build input (bundled into innetwork.bundle.js)
     # and the unit-tested source (Vitest). Still served for source transparency.
     return _static_file(request, _FRONTEND_LOGIC, "application/javascript",
-                        "carefind.logic.js not found next to the app package.")
+                        "innetwork.logic.js not found next to the app package.")
 
 
-@router.get("/carefind-icon.svg")
+@router.get("/innetwork-icon.svg")
 def app_icon(request: Request) -> Response:
     return _static_file(request, _ICON, "image/svg+xml",
-                        "carefind-icon.svg not found next to the app package.")
+                        "innetwork-icon.svg not found next to the app package.")
 
 
-@router.get("/carefind-og.svg")
+@router.get("/innetwork-og.svg")
 def og_image(request: Request) -> Response:
     # Social-share card (og:image / twitter:image). On Vercel the physical file is
     # static-served; this route serves it app-direct (local dev / self-host).
     return _static_file(request, _OG_IMAGE, "image/svg+xml",
-                        "carefind-og.svg not found next to the app package.")
+                        "innetwork-og.svg not found next to the app package.")
 
 
 @router.get("/favicon.ico")
@@ -113,7 +113,7 @@ def favicon(request: Request) -> Response:
     # Browsers and crawlers request /favicon.ico directly regardless of the <link> icon;
     # answer with the SVG mark (modern engines accept image/svg+xml here) instead of a 404.
     return _static_file(request, _ICON, "image/svg+xml",
-                        "carefind-icon.svg not found next to the app package.")
+                        "innetwork-icon.svg not found next to the app package.")
 
 
 @router.get("/robots.txt")

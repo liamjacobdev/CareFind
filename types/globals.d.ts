@@ -4,5 +4,5 @@
 declare const L: any;
 interface Window {
   L?: any;
-  CAREFIND_CONFIG?: { apiBase?: string; claimEmail?: string; allowPublicProxies?: boolean };
+  INNETWORK_CONFIG?: { apiBase?: string; claimEmail?: string; allowPublicProxies?: boolean };
 }

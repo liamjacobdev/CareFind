@@ -1,6 +1,6 @@
-/* CareFind — pure presentation/transform logic. The SINGLE source of truth for these
+/* InNetwork — pure presentation/transform logic. The SINGLE source of truth for these
  * functions, imported both by the Vitest unit tests and by src/main.js (which esbuild
- * bundles into carefind.bundle.js for the page). Keep everything here PURE: no DOM, no
+ * bundles into innetwork.bundle.js for the page). Keep everything here PURE: no DOM, no
  * `state`, no network. Anything needing page state takes it as an argument.
  *
  * Native ES module: named exports for direct use, plus a default object so existing

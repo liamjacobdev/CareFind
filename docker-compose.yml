@@ -4,11 +4,11 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      CAREFIND_DB: /data/carefind.db
+      INNETWORK_DB: /data/innetwork.db
       # Behind the Caddy front-end below, trust X-Forwarded-For so the rate limiter
       # buckets on the real client IP (see app/main.py:_client_ip). The api service
       # is only reachable via Caddy (expose, not ports), so the header is trustworthy.
-      CAREFIND_TRUST_PROXY: "true"
+      INNETWORK_TRUST_PROXY: "true"
       # Scope uvicorn's proxy-header trust to the edge network's subnet (below), so
       # only the Caddy container — never some other host that reaches the port — is
       # trusted to set X-Forwarded-For. Replaces the old --forwarded-allow-ips "*".
@@ -16,7 +16,7 @@ services:
     networks:
       - edge
     volumes:
-      - carefind-data:/data        # persists Medicare index + geocode cache
+      - innetwork-data:/data        # persists Medicare index + geocode cache
       # Optional: wire verified FHIR payers. Create payers.json first
       # (cp payers.example.json payers.json), then uncomment:
       # - ./payers.json:/app/payers.json:ro
@@ -58,6 +58,6 @@ networks:
         - subnet: 172.28.0.0/24
 
 volumes:
-  carefind-data:
+  innetwork-data:
   caddy-data:
   caddy-config:

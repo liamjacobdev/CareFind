@@ -12,14 +12,14 @@ from typing import Any
 # The shipped default User-Agent. Nominatim's free usage policy rejects placeholder/
 # templated agents (HTTP 403), so this only matters for the optional Nominatim
 # fallback — geocoding works out of the box via the Census source regardless.
-_DEFAULT_UA = "CareFind/3.1 self-hosted (single-user; set CAREFIND_UA with your email)"
+_DEFAULT_UA = "InNetwork/3.1 self-hosted (single-user; set INNETWORK_UA with your email)"
 
 
 class Settings:
     def __init__(self) -> None:
         # SQLite file holding the Medicare index + geocode cache. Keep it on a
         # persistent volume in production so both survive restarts.
-        self.db_path = os.environ.get("CAREFIND_DB", "./carefind.db")
+        self.db_path = os.environ.get("INNETWORK_DB", "./innetwork.db")
 
         # Comma-separated list of origins allowed to call the API. Empty -> "*"
         # (fine for local dev; set this to your real frontend origin in prod).
@@ -27,18 +27,18 @@ class Settings:
         self.allowed_origins = [o.strip() for o in origins.split(",") if o.strip()]
 
         # Nominatim and NPPES both ask callers to identify themselves. Put a real
-        # contact in CAREFIND_UA before pointing this at the live services.
+        # contact in INNETWORK_UA before pointing this at the live services.
         # Nominatim/NPPES ask callers to identify themselves with a real contact.
-        # Set CAREFIND_UA to your own email before any heavy use — the public
+        # Set INNETWORK_UA to your own email before any heavy use — the public
         # OpenStreetMap geocoder blocks placeholder/templated user-agents (HTTP 403).
-        self.contact_ua = os.environ.get("CAREFIND_UA", _DEFAULT_UA)
-        # True when CAREFIND_UA is still the shipped placeholder — i.e. the Nominatim
+        self.contact_ua = os.environ.get("INNETWORK_UA", _DEFAULT_UA)
+        # True when INNETWORK_UA is still the shipped placeholder — i.e. the Nominatim
         # fallback won't work (403). Geocoding still works via Census; used only to
         # decide whether to warn at startup.
         self.ua_is_placeholder = self.contact_ua == _DEFAULT_UA
 
         # Primary geocoder: the free, keyless, US-only Census Geocoder. Set
-        # GEOCODE_USE_CENSUS=false to force the Nominatim-only path (needs CAREFIND_UA).
+        # GEOCODE_USE_CENSUS=false to force the Nominatim-only path (needs INNETWORK_UA).
         self.geocode_use_census = os.environ.get(
             "GEOCODE_USE_CENSUS", "true"
         ).strip().lower() in ("1", "true", "yes", "on")
@@ -54,25 +54,25 @@ class Settings:
         )
 
         # Where to find configured commercial payers (see payers.example.json).
-        self.payers_file = os.environ.get("CAREFIND_PAYERS", "payers.json")
+        self.payers_file = os.environ.get("INNETWORK_PAYERS", "payers.json")
 
         # Per-payer Transparency-in-Coverage source URLs for the scheduled ingest job
         # (see tic_sources.example.json). Maps a catalog payer id -> its published
         # in-network file URL, so a monthly cron can refresh every payer in one run.
-        self.tic_sources_file = os.environ.get("CAREFIND_TIC_SOURCES", "tic_sources.json")
+        self.tic_sources_file = os.environ.get("INNETWORK_TIC_SOURCES", "tic_sources.json")
 
         # FHIR Plan-Net result cache TTLs (seconds). A definite answer (in-network /
         # not-found) is stable, so it's cached for a day; an "unknown" (the payer's
         # endpoint errored/timed out) is cached only briefly so a recovered endpoint
         # is retried soon rather than pinned as unknown. Never is "unknown" read as a
         # "no" — see app/insurance.py.
-        self.fhir_cache_ttl = int(os.environ.get("CAREFIND_FHIR_CACHE_TTL", str(24 * 3600)))
-        self.fhir_cache_unknown_ttl = int(os.environ.get("CAREFIND_FHIR_CACHE_UNKNOWN_TTL", "600"))
+        self.fhir_cache_ttl = int(os.environ.get("INNETWORK_FHIR_CACHE_TTL", str(24 * 3600)))
+        self.fhir_cache_unknown_ttl = int(os.environ.get("INNETWORK_FHIR_CACHE_UNKNOWN_TTL", "600"))
 
         # Short TTL for the NPPES search-result cache (C4). Kept brief because the public
         # registry changes and a search is interactive; long enough to absorb pagination
         # and repeat queries within a session.
-        self.nppes_cache_ttl = int(os.environ.get("CAREFIND_NPPES_CACHE_TTL", "120"))
+        self.nppes_cache_ttl = int(os.environ.get("INNETWORK_NPPES_CACHE_TTL", "120"))
 
         # How strict the FHIR Plan-Net "in-network" determination is.
         #   "network"  (default) — a Confirmed answer requires an *active*
@@ -83,7 +83,7 @@ class Settings:
         #       without a network link (directory presence). Opt-in only, for payers
         #       whose published directory is known not to populate network references.
         self.fhir_strictness = os.environ.get(
-            "CAREFIND_FHIR_STRICTNESS", "network"
+            "INNETWORK_FHIR_STRICTNESS", "network"
         ).strip().lower()
         if self.fhir_strictness not in ("network", "directory"):
             self.fhir_strictness = "network"
@@ -92,7 +92,7 @@ class Settings:
         # are streamed and aborted the moment they exceed this, so a hostile or
         # mistyped URL can't OOM the box by being read fully into memory. Default
         # 2 GiB — well above any real single-payer file, far below "exhaust RAM".
-        self.ingest_max_bytes = int(os.environ.get("CAREFIND_INGEST_MAX_BYTES", str(2 * 1024**3)))
+        self.ingest_max_bytes = int(os.environ.get("INNETWORK_INGEST_MAX_BYTES", str(2 * 1024**3)))
 
         # Polite minimum seconds between live Nominatim requests (their usage
         # policy is max 1 req/sec). The cache means we rarely hit this.
@@ -108,7 +108,7 @@ class Settings:
         # only the proxy's IP and collapses into one global bucket. Enable ONLY behind
         # a proxy you control — otherwise a client could spoof the header to dodge the
         # limit. The provided docker-compose sets this for the Caddy front-end.
-        self.trust_proxy = os.environ.get("CAREFIND_TRUST_PROXY", "false").strip().lower() in (
+        self.trust_proxy = os.environ.get("INNETWORK_TRUST_PROXY", "false").strip().lower() in (
             "1", "true", "yes", "on",
         )
 
@@ -116,38 +116,38 @@ class Settings:
         # behind a Protocol so scaling is a config swap, not a rewrite. Defaults are the
         # $0 self-hosted implementations; alternates (e.g. Redis, Postgres) are wired in
         # D4 and selected here without touching call sites.
-        self.datastore = os.environ.get("CAREFIND_DATASTORE", "sqlite").strip().lower()
-        self.rate_limiter = os.environ.get("CAREFIND_RATE_LIMITER", "memory").strip().lower()
-        self.cache_backend = os.environ.get("CAREFIND_CACHE", "memory").strip().lower()
+        self.datastore = os.environ.get("INNETWORK_DATASTORE", "sqlite").strip().lower()
+        self.rate_limiter = os.environ.get("INNETWORK_RATE_LIMITER", "memory").strip().lower()
+        self.cache_backend = os.environ.get("INNETWORK_CACHE", "memory").strip().lower()
 
         # Wire the validated public FHIR Plan-Net endpoints (app/planet_registry.py) as
         # verified filters out of the box. On by default so a fresh clone gets verified
         # coverage with zero config; tests turn it off for hermeticity and opt in.
         self.use_planet_registry = os.environ.get(
-            "CAREFIND_USE_PLANET_REGISTRY", "true"
+            "INNETWORK_USE_PLANET_REGISTRY", "true"
         ).strip().lower() in ("1", "true", "yes", "on")
 
         # When the same process serves BOTH the page and the API (e.g. the Vercel
-        # serverless deploy), serve carefind.config.js with apiBase rewritten to the
+        # serverless deploy), serve innetwork.config.js with apiBase rewritten to the
         # request's own origin — so a fresh deploy works on first load with no
         # configure_frontend step. Off by default (a separately-hosted frontend keeps the
         # apiBase baked by configure_frontend.py).
         self.same_origin_frontend = os.environ.get(
-            "CAREFIND_SAME_ORIGIN", "false"
+            "INNETWORK_SAME_ORIGIN", "false"
         ).strip().lower() in ("1", "true", "yes", "on")
 
         # Data-age SLOs (C3). A source whose last ingest is older than its budget is
         # "stale" and flips /healthz to 503 — a dead-man's-switch for a stalled ingest.
         # Medicare refreshes quarterly (~92d; allow slack); TiC payers monthly.
-        self.medicare_max_age_days = int(os.environ.get("CAREFIND_MEDICARE_MAX_AGE_DAYS", "100"))
-        self.payer_max_age_days = int(os.environ.get("CAREFIND_PAYER_MAX_AGE_DAYS", "35"))
+        self.medicare_max_age_days = int(os.environ.get("INNETWORK_MEDICARE_MAX_AGE_DAYS", "100"))
+        self.payer_max_age_days = int(os.environ.get("INNETWORK_PAYER_MAX_AGE_DAYS", "35"))
 
         # Token guarding POST /admin/ingest, which the scheduled ingest cron calls to
         # refresh the deployed instance. Unset -> the admin endpoint is disabled (404).
-        self.admin_token = os.environ.get("CAREFIND_ADMIN_TOKEN", "").strip()
+        self.admin_token = os.environ.get("INNETWORK_ADMIN_TOKEN", "").strip()
         # Direct URL to the CMS Medicare enrollment CSV, used by the admin "medicare"
         # ingest trigger. Unset -> that trigger reports it's unconfigured (no guessing).
-        self.medicare_ingest_url = os.environ.get("CAREFIND_MEDICARE_INGEST_URL", "").strip()
+        self.medicare_ingest_url = os.environ.get("INNETWORK_MEDICARE_INGEST_URL", "").strip()
 
     def load_payers(self) -> list[dict[str, Any]]:
         """Read payers.json -> list of payer config dicts. Missing file is fine."""

@@ -1,6 +1,6 @@
 """Scale-readiness seams: the four external dependencies behind Protocols.
 
-CareFind ships with $0 self-hosted defaults — SQLite, in-process cache, in-process
+InNetwork ships with $0 self-hosted defaults — SQLite, in-process cache, in-process
 rate limiter, the keyless geocoders. Scaling to multiple workers or a bigger box is a
 *config swap*, not a rewrite: provide an implementation that satisfies the relevant
 Protocol (e.g. a Postgres `Datastore` or a Redis `RateLimiter`/`CacheBackend`) and

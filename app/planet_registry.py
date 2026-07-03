@@ -13,7 +13,7 @@ fresh clone gets verified coverage with zero config.
 
 What "validated" means here is strict, and was learned the hard way (see the notes
 below): it is NOT enough that `{base}/PractitionerRole` returns a Bundle. The endpoint
-must support the **per-NPI lookup CareFind actually performs** without lying in either
+must support the **per-NPI lookup InNetwork actually performs** without lying in either
 direction:
   • a bogus NPI must return an EMPTY result (else it ignores the filter and would mark
     *every* provider in-network — a fabricated "yes"; CT's directory does exactly this);
@@ -248,7 +248,7 @@ def validated() -> list[PlanNetEndpoint]:
 
 def validated_payer_configs() -> list[dict[str, Any]]:
     """Validated endpoints as payers.json-shaped configs, for Registry.build(). Empty
-    when CAREFIND_USE_PLANET_REGISTRY is off (e.g. hermetic tests opt in explicitly)."""
+    when INNETWORK_USE_PLANET_REGISTRY is off (e.g. hermetic tests opt in explicitly)."""
     if not settings.use_planet_registry:
         return []
     return [e.payer_config() for e in validated()]

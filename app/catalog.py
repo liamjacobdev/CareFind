@@ -2,11 +2,11 @@
 
 Two things live here:
 
-  1. CATEGORIES — the canonical coverage *types* CareFind groups payers under, in
+  1. CATEGORIES — the canonical coverage *types* InNetwork groups payers under, in
      display order. Every plan belongs to exactly one category.
 
   2. PAYER_CATALOG — a curated list of major US payers used for the ESTIMATED tier.
-     These are not per-provider verified facts; they let CareFind offer a broad,
+     These are not per-provider verified facts; they let InNetwork offer a broad,
      recognizable set of named-payer filters. When no verified source covers an
      (NPI, payer), a catalog payer that operates in the provider's state is surfaced
      as "Estimated" ("likely — confirm with the provider"), never as confirmed.

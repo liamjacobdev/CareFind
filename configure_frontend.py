@@ -1,20 +1,20 @@
-"""Point carefind.html at your deployed API in one step.
+"""Point innetwork.html at your deployed API in one step.
 
 Editing the frontend for production means changing two places that must agree:
-  1. CAREFIND_CONFIG.apiBase — where the page sends requests
+  1. INNETWORK_CONFIG.apiBase — where the page sends requests
   2. the CSP connect-src     — which origins the browser is allowed to reach
 
 This script sets both from a single argument, so they never drift.
 
-A third value, CAREFIND_CONFIG.claimEmail (the "claim your listing" inbox), must
+A third value, INNETWORK_CONFIG.claimEmail (the "claim your listing" inbox), must
 also be set for the provider-claim affordances to appear at all — the page hides
 them while it still holds the placeholder. Set it here from --claim-email or
-$CAREFIND_CLAIM_EMAIL so it can't drift either.
+$INNETWORK_CLAIM_EMAIL so it can't drift either.
 
 Usage:
     python configure_frontend.py https://api.yourdomain.com
     python configure_frontend.py https://api.yourdomain.com --claim-email you@real.com
-    python configure_frontend.py https://api.yourdomain.com --out carefind.prod.html
+    python configure_frontend.py https://api.yourdomain.com --out innetwork.prod.html
 """
 import argparse
 import os
@@ -22,12 +22,12 @@ import re
 import sys
 from pathlib import Path
 
-SRC = Path(__file__).parent / "carefind.html"
-CONFIG_SRC = Path(__file__).parent / "carefind.config.js"
+SRC = Path(__file__).parent / "innetwork.html"
+CONFIG_SRC = Path(__file__).parent / "innetwork.config.js"
 
-# Mirrors the placeholder in carefind.config.js; the page hides claim affordances while
+# Mirrors the placeholder in innetwork.config.js; the page hides claim affordances while
 # claimEmail equals this, so swapping it in is what turns the feature on.
-PLACEHOLDER_CLAIM_EMAIL = "providers@carefind.example"
+PLACEHOLDER_CLAIM_EMAIL = "providers@innetwork.example"
 
 
 # The public CORS-proxy fallbacks the standalone (no-backend) page can opt into.
@@ -44,7 +44,7 @@ def configure(api_base: str, out: Path, allow_public_proxies: bool = False,
               claim_email: str = None) -> None:
     api_base = api_base.rstrip("/")
 
-    # ── 1) Rewrite carefind.config.js (apiBase / claimEmail / allowPublicProxies) ──
+    # ── 1) Rewrite innetwork.config.js (apiBase / claimEmail / allowPublicProxies) ──
     cfg = CONFIG_SRC.read_text(encoding="utf-8")
     if claim_email:  # only when a real address is supplied; else keep the placeholder
         new = re.sub(r"claimEmail:\s*'[^']*'", f"claimEmail: '{claim_email}'", cfg, count=1)
@@ -57,10 +57,10 @@ def configure(api_base: str, out: Path, allow_public_proxies: bool = False,
     cfg = new
     if allow_public_proxies:
         cfg = re.sub(r"allowPublicProxies:\s*false", "allowPublicProxies: true", cfg, count=1)
-    config_out = out.parent / "carefind.config.js"
+    config_out = out.parent / "innetwork.config.js"
     config_out.write_text(cfg, encoding="utf-8")
 
-    # ── 2) Rewrite carefind.html's CSP connect-src to the real API origin ──
+    # ── 2) Rewrite innetwork.html's CSP connect-src to the real API origin ──
     html = SRC.read_text(encoding="utf-8")
 
     def fix_connect(m):
@@ -90,14 +90,14 @@ def configure(api_base: str, out: Path, allow_public_proxies: bool = False,
 def main(argv) -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("api_base", help="e.g. https://api.yourdomain.com")
-    ap.add_argument("--out", default="carefind.html",
-                    help="output file (default: overwrite carefind.html)")
+    ap.add_argument("--out", default="innetwork.html",
+                    help="output file (default: overwrite innetwork.html)")
     ap.add_argument("--allow-public-proxies", action="store_true",
                     help="opt into the public CORS-proxy fallbacks (adds them to the "
                          "CSP and flips ALLOW_PUBLIC_PROXIES). Off by default.")
-    ap.add_argument("--claim-email", default=os.environ.get("CAREFIND_CLAIM_EMAIL"),
+    ap.add_argument("--claim-email", default=os.environ.get("INNETWORK_CLAIM_EMAIL"),
                     help="real inbox for provider 'claim your listing' requests "
-                         "(or set $CAREFIND_CLAIM_EMAIL). Until set, the page hides "
+                         "(or set $INNETWORK_CLAIM_EMAIL). Until set, the page hides "
                          "all claim affordances rather than showing a dead mailto.")
     args = ap.parse_args(argv[1:])
     claim_email = (args.claim_email or "").strip() or None

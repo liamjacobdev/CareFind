@@ -384,7 +384,7 @@ async def test_fhir_upstream_error_degrades_and_logs(temp_db, caplog):
     respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(503))
     src = FhirPlanNetSource({"id": "demo", "label": "Demo", "base_url": base})
 
-    with caplog.at_level("WARNING", logger="carefind.insurance"):
+    with caplog.at_level("WARNING", logger="innetwork.insurance"):
         out = await src.check_many(["1111111111"])
 
     assert out["1111111111"] is None  # degraded, not fabricated

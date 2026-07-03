@@ -1,10 +1,10 @@
-/* CareFind app — the page's interactive layer (state, network, map, search, UI).
+/* InNetwork app — the page's interactive layer (state, network, map, search, UI).
  *
- * Bundled by build.mjs (esbuild) into carefind.bundle.js and loaded by carefind.html
+ * Bundled by build.mjs (esbuild) into innetwork.bundle.js and loaded by innetwork.html
  * as a single same-origin <script src>, so the page carries no inline business logic
  * (which lets the CSP drop 'unsafe-inline' for scripts — see D3). Deploy config comes
- * from ./config.js (injected window.CAREFIND_CONFIG); pure transforms come from the
- * shared, unit-tested ../carefind.logic.js.
+ * from ./config.js (injected window.INNETWORK_CONFIG); pure transforms come from the
+ * shared, unit-tested ../innetwork.logic.js.
  */
 import {
   API_BASE,
@@ -17,7 +17,7 @@ import {
   SERVED,
   SAME_ORIGIN,
 } from './config.js';
-import logic from '../carefind.logic.js';
+import logic from '../innetwork.logic.js';
 
 const {
   TAXONOMY_MAP,
@@ -32,8 +32,8 @@ const {
   csvCell,
 } = logic;
 
-const LS_KEY = 'carefind_saved_v4';
-const GEO_KEY = 'carefind_geocache_v1';
+const LS_KEY = 'innetwork_saved_v4';
+const GEO_KEY = 'innetwork_geocache_v1';
 
 // Loosely-typed element accessor: the app knows which concrete element each id is, so
 // this returns `any` to let `tsc --checkJs` allow .value/.dataset/etc. at DOM boundaries
@@ -204,7 +204,7 @@ let mapInstance = null,
 /* ════════════════════════════════════════════
    THEME (light / dark) — persisted, system-aware
    ════════════════════════════════════════════ */
-const THEME_KEY = 'carefind_theme';
+const THEME_KEY = 'innetwork_theme';
 // Brand-matched tiles per theme: CARTO Voyager (light) / Dark Matter (dark).
 const TILES = {
   light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
@@ -303,7 +303,7 @@ async function fetchNpi(params) {
     }
   }
   throw new Error(
-    'Could not reach the registry directly from your browser (the CMS registry does not allow direct browser calls). Start the CareFind backend — "uvicorn app.main:app --port 8000" — and open http://localhost:8000, which queries the registry server-side.',
+    'Could not reach the registry directly from your browser (the CMS registry does not allow direct browser calls). Start the InNetwork backend — "uvicorn app.main:app --port 8000" — and open http://localhost:8000, which queries the registry server-side.',
   );
 }
 
@@ -427,7 +427,7 @@ function plotMarkers() {
       title: doc.name,
       alt: `${doc.name} — ${doc.specialty}`,
     });
-    m.bindPopup(buildPopup(doc), { maxWidth: 280, className: 'carefind-popup' });
+    m.bindPopup(buildPopup(doc), { maxWidth: 280, className: 'innetwork-popup' });
     m.on('click', () => selectDoctor(doc.npi, false));
     m.on('popupopen', () => {
       updateMarkerStyles(doc.npi);
@@ -452,7 +452,7 @@ function addOrMoveMarker(doc) {
     title: doc.name,
     alt: `${doc.name} — ${doc.specialty}`,
   });
-  m.bindPopup(buildPopup(doc), { maxWidth: 280, className: 'carefind-popup' });
+  m.bindPopup(buildPopup(doc), { maxWidth: 280, className: 'innetwork-popup' });
   m.on('click', () => selectDoctor(doc.npi, false));
   m.on('popupopen', () => {
     updateMarkerStyles(doc.npi);
@@ -676,7 +676,7 @@ async function backendSearch(f) {
     });
   } catch (_) {
     // Connection refused / DNS / timeout — backend isn't reachable.
-    const e = /** @type {Error & { unreachable?: boolean }} */ (new Error('The CareFind API is unreachable.'));
+    const e = /** @type {Error & { unreachable?: boolean }} */ (new Error('The InNetwork API is unreachable.'));
     e.unreachable = true;
     throw e;
   }
@@ -685,7 +685,7 @@ async function backendSearch(f) {
       const j = await res.json().catch(() => ({}));
       throw new Error(j.detail || 'The registry rejected the query.');
     }
-    const e = /** @type {Error & { unreachable?: boolean }} */ (new Error('The CareFind API is unreachable.'));
+    const e = /** @type {Error & { unreachable?: boolean }} */ (new Error('The InNetwork API is unreachable.'));
     e.unreachable = true;
     throw e;
   }
@@ -699,7 +699,7 @@ async function backendSearch(f) {
 }
 
 // Tell the user (once per session) we're querying the official registry directly
-// because the optional CareFind backend isn't running.
+// because the optional InNetwork backend isn't running.
 let _backendFallbackNoted = false;
 function noteBackendFallback() {
   // Only reached when ALLOW_PUBLIC_PROXIES is on — the one standalone path that
@@ -707,7 +707,7 @@ function noteBackendFallback() {
   // honest "start the backend" state instead of this.)
   if (_backendFallbackNoted) return;
   _backendFallbackNoted = true;
-  console.info('CareFind backend not reachable — routing through the opt-in public CORS proxy.');
+  console.info('InNetwork backend not reachable — routing through the opt-in public CORS proxy.');
   showToast('Backend offline — using the public CORS proxy');
 }
 
@@ -852,7 +852,7 @@ function describeNoResults(f) {
    Standalone (no-backend) path only. It mirrors the backend's normalize()
    (app/main.py) field-for-field; when HAS_BACKEND is set, adaptBackendProvider()
    consumes the server's normalized shape instead and this is unused. Keep the two
-   in sync if you add a field. buildProviders() itself lives in carefind.logic.js
+   in sync if you add a field. buildProviders() itself lives in innetwork.logic.js
    (the normalize() mirror, shared with the unit tests).
    ════════════════════════════════════════════ */
 
@@ -1078,7 +1078,7 @@ function coverageHtml(doc, insSearch) {
       <p style="font-size:.7rem;color:var(--faint);margin:9px 0 0;line-height:1.5;"><b>Confirmed</b> = enrolled in a specific program (e.g. official Medicare). <b>In-network</b> = listed in this payer's network directory — confirm your specific plan. <b>Likely</b> = a major payer operating in this area, not provider-specific. <a href="${insSearch}" target="_blank" rel="noopener">Confirm directly</a>.</p>`;
   }
   return `<div class="coverage-note">
-      <b>Insurance networks are not part of the public registry.</b> This standalone build shows the official CMS record, which does not list accepted plans. Connect the CareFind backend to enable verified Medicare and payer-network filtering. Until then, confirm coverage directly before booking.
+      <b>Insurance networks are not part of the public registry.</b> This standalone build shows the official CMS record, which does not list accepted plans. Connect the InNetwork backend to enable verified Medicare and payer-network filtering. Until then, confirm coverage directly before booking.
       <div class="cov-actions">${doc.phone ? `<a href="tel:${esc(doc.phoneRaw)}">Call to confirm</a>` : ''}<a href="${insSearch}" target="_blank" rel="noopener">Search accepted plans</a></div>
     </div>`;
 }
@@ -1165,8 +1165,8 @@ function showBackendRequired() {
   const list = byId('results-list');
   list.classList.remove('cards');
   list.innerHTML = `<div class="state-block"><svg class="state-art" width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="#b3402f" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 20h10M9 16v4M15 16v4"/></svg>
-    <p class="state-title">Start the CareFind backend</p>
-    <p class="state-text">Provider search runs through the CareFind backend — the public CMS registry can't be queried directly from a browser. Start it and reload:</p>
+    <p class="state-title">Start the InNetwork backend</p>
+    <p class="state-text">Provider search runs through the InNetwork backend — the public CMS registry can't be queried directly from a browser. Start it and reload:</p>
     <p class="state-text" style="font-family:ui-monospace,Menlo,monospace;background:var(--card,#f4f6f5);padding:8px 12px;border-radius:8px;">uvicorn app.main:app --port 8000</p>
     <p class="state-text">then open <b>http://localhost:8000</b>. <button class="state-retry" data-action="search" style="margin-top:8px;">Try again</button></p></div>`;
   byId('results-count-header').textContent = '';
@@ -1406,13 +1406,13 @@ function exportFavorites(kind) {
   let blob, fname;
   if (kind === 'json') {
     blob = new Blob([JSON.stringify(items, null, 2)], { type: 'application/json' });
-    fname = 'carefind-saved.json';
+    fname = 'innetwork-saved.json';
   } else {
     const cols = ['npi', 'name', 'specialty', 'fullAddress', 'phone', 'fax', 'gender', 'status'];
     // csvCell quotes AND neutralizes spreadsheet formula injection (shared, unit-tested).
     const rows = [cols.join(',')].concat(items.map((d) => cols.map((c) => csvCell(d[c])).join(',')));
     blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-    fname = 'carefind-saved.csv';
+    fname = 'innetwork-saved.csv';
   }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1508,7 +1508,7 @@ function readUrl() {
    ════════════════════════════════════════════ */
 let claimLastFocus = null;
 function openClaim(npi) {
-  const subject = encodeURIComponent(npi ? `Claim CareFind listing — NPI ${npi}` : 'Claim a CareFind listing');
+  const subject = encodeURIComponent(npi ? `Claim InNetwork listing — NPI ${npi}` : 'Claim a InNetwork listing');
   byId('claim-link').href = `mailto:${CLAIM_EMAIL}?subject=${subject}`;
   const m = byId('claim-modal');
   m.classList.add('open');

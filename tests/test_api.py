@@ -109,27 +109,27 @@ def test_config_load_payers_tolerates_malformed_file(tmp_path, monkeypatch):
 
 
 def test_config_js_static_by_default(client):
-    """Default (no CAREFIND_SAME_ORIGIN): config.js is served verbatim, so a
+    """Default (no INNETWORK_SAME_ORIGIN): config.js is served verbatim, so a
     separately-hosted frontend keeps whatever apiBase configure_frontend baked in —
     the shipped file's origin, untouched (localhost in dev, the prod origin once baked)."""
     import re
     from pathlib import Path
-    shipped = (Path(main.__file__).resolve().parent.parent / "carefind.config.js").read_text(encoding="utf-8")
+    shipped = (Path(main.__file__).resolve().parent.parent / "innetwork.config.js").read_text(encoding="utf-8")
     m = re.search(r"apiBase:\s*'([^']*)'", shipped)
-    assert m, "carefind.config.js must define an apiBase"
-    r = client.get("/carefind.config.js")
+    assert m, "innetwork.config.js must define an apiBase"
+    r = client.get("/innetwork.config.js")
     assert r.status_code == 200
     assert f"apiBase: '{m.group(1)}'" in r.text  # served verbatim, whatever origin is baked
 
 
 def test_config_js_same_origin_rewrites_apibase(client, monkeypatch):
-    """With CAREFIND_SAME_ORIGIN (the Vercel deploy), apiBase is rewritten to the
+    """With INNETWORK_SAME_ORIGIN (the Vercel deploy), apiBase is rewritten to the
     request's own origin so the first deploy works with no configure_frontend step."""
     monkeypatch.setattr(main.settings, "same_origin_frontend", True)
-    r = client.get("/carefind.config.js", headers={
-        "x-forwarded-proto": "https", "x-forwarded-host": "carefind.vercel.app"})
+    r = client.get("/innetwork.config.js", headers={
+        "x-forwarded-proto": "https", "x-forwarded-host": "innetwork.vercel.app"})
     assert r.status_code == 200
-    assert "apiBase: 'https://carefind.vercel.app'" in r.text
+    assert "apiBase: 'https://innetwork.vercel.app'" in r.text
     assert "localhost:8000" not in r.text
 
 
@@ -157,7 +157,7 @@ def test_favicon_served_not_404(client):
 
 
 def test_og_image_served(client):
-    r = client.get("/carefind-og.svg")
+    r = client.get("/innetwork-og.svg")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("image/svg+xml")
     assert "<svg" in r.text
@@ -277,9 +277,9 @@ def test_normalize_matches_golden(temp_db):
 
 
 def test_frontend_logic_js_served(client):
-    """The page loads its pure logic from /carefind.logic.js — the backend must
+    """The page loads its pure logic from /innetwork.logic.js — the backend must
     serve it as JavaScript (and it must be the real, extracted module)."""
-    r = client.get("/carefind.logic.js")
+    r = client.get("/innetwork.logic.js")
     assert r.status_code == 200
     assert "javascript" in r.headers["content-type"]
     assert "function buildProviders" in r.text
@@ -307,15 +307,15 @@ def test_bundle_served_and_page_has_no_inline_logic(client):
     script), injects config as data, and carries NO inline business logic — the
     precondition for dropping 'unsafe-inline' from the script CSP (D3)."""
     page = client.get("/").text
-    assert 'src="carefind.bundle.js"' in page
+    assert 'src="innetwork.bundle.js"' in page
     # Config is external (D3) — referenced, not inlined — so the HTML has no inline JS.
-    assert 'src="carefind.config.js"' in page
-    assert "window.CAREFIND_CONFIG" not in page
+    assert 'src="innetwork.config.js"' in page
+    assert "window.INNETWORK_CONFIG" not in page
     # The old inline app functions must be gone from the HTML (now in the bundle).
     assert "function handleSearch" not in page
     assert "function bootstrap" not in page
 
-    bundle = client.get("/carefind.bundle.js")
+    bundle = client.get("/innetwork.bundle.js")
     assert bundle.status_code == 200
     assert "javascript" in bundle.headers["content-type"]
     assert "buildProviders" in bundle.text             # logic bundled in
@@ -339,11 +339,11 @@ def test_security_headers_and_strict_csp(client):
     script_src = next(d for d in csp.split(";") if d.strip().startswith("script-src"))
     assert "'unsafe-inline'" not in script_src
     # No inline executable <script> blocks remain; config + app are external.
-    assert "window.CAREFIND_CONFIG" not in page
-    assert 'src="carefind.config.js"' in page and 'src="carefind.bundle.js"' in page
+    assert "window.INNETWORK_CONFIG" not in page
+    assert 'src="innetwork.config.js"' in page and 'src="innetwork.bundle.js"' in page
 
-    cfg = client.get("/carefind.config.js")
-    assert cfg.status_code == 200 and "window.CAREFIND_CONFIG" in cfg.text
+    cfg = client.get("/innetwork.config.js")
+    assert cfg.status_code == 200 and "window.INNETWORK_CONFIG" in cfg.text
 
 
 def test_metrics_protected_by_admin_token(client, monkeypatch):
@@ -386,11 +386,11 @@ def test_no_pii_in_logs(client, monkeypatch, caplog):
 
 def test_app_icon_served(client):
     """The app icon is served with the right media type (used as favicon / apple-touch)."""
-    icon = client.get("/carefind-icon.svg")
+    icon = client.get("/innetwork-icon.svg")
     assert icon.status_code == 200 and icon.headers["content-type"].startswith("image/svg")
 
 
-@pytest.mark.parametrize("path", ["/", "/carefind.logic.js", "/carefind.bundle.js"])
+@pytest.mark.parametrize("path", ["/", "/innetwork.logic.js", "/innetwork.bundle.js"])
 def test_static_files_etag_304(client, path):
     """T4.2: static frontend files carry an ETag + Cache-Control, and a repeat load
     with If-None-Match returns 304 (not re-downloaded)."""
@@ -449,7 +449,7 @@ def test_regional_estimate_still_discriminates_by_state(client):
 
 
 def test_normalize_pins_provider_shape():
-    """Golden record for normalize(). carefind.html:buildProviders() mirrors this
+    """Golden record for normalize(). innetwork.html:buildProviders() mirrors this
     field-for-field for the standalone path; if you add/rename a field here, update
     the frontend (and this assertion) so the two shapes can't silently drift."""
     rec = {

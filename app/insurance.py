@@ -23,7 +23,7 @@ from .sources import (
     TicSource,
 )
 
-log = logging.getLogger("carefind.insurance")
+log = logging.getLogger("innetwork.insurance")
 
 # Re-exported for a stable import path (tests, app.verify_payers, app.main).
 __all__ = ["Answer", "Ctx", "InsuranceSource", "MedicareSource", "TicSource",

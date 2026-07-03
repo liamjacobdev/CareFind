@@ -2,7 +2,7 @@
 
 Default is in-process (per-worker). For a hard global cap across workers, provide a
 shared implementation (e.g. Redis) that satisfies the same protocol and select it via
-CAREFIND_RATE_LIMITER (see build_rate_limiter); no call-site change needed.
+INNETWORK_RATE_LIMITER (see build_rate_limiter); no call-site change needed.
 """
 import time
 from collections import defaultdict, deque

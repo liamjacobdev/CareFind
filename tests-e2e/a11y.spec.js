@@ -6,7 +6,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 
-const PAGE = pathToFileURL(join(process.cwd(), 'carefind.html')).href;
+const PAGE = pathToFileURL(join(process.cwd(), 'innetwork.html')).href;
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 const MEDICARE = {

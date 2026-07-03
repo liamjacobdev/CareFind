@@ -1,5 +1,5 @@
 """Nightly live-integration (E1). These hit the REAL public services (NPPES, the
-geocoders, the validated FHIR Plan-Net endpoints) and are skipped unless CAREFIND_LIVE=1,
+geocoders, the validated FHIR Plan-Net endpoints) and are skipped unless INNETWORK_LIVE=1,
 so normal CI stays hermetic. The nightly workflow (.github/workflows/nightly.yml) sets
 the flag, so a regression in a real upstream — or a payer endpoint that stops passing the
 per-NPI round-trip — is caught within a day.
@@ -10,8 +10,8 @@ import httpx
 import pytest
 
 live = pytest.mark.skipif(
-    not os.environ.get("CAREFIND_LIVE"),
-    reason="live integration — set CAREFIND_LIVE=1 (nightly only)",
+    not os.environ.get("INNETWORK_LIVE"),
+    reason="live integration — set INNETWORK_LIVE=1 (nightly only)",
 )
 
 

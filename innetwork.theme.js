@@ -5,7 +5,7 @@
    'unsafe-inline' for script-src) still holds. The full toggle lives in the bundle. */
 (function () {
   try {
-    var saved = localStorage.getItem('carefind_theme');
+    var saved = localStorage.getItem('innetwork_theme');
     var dark = saved
       ? saved === 'dark'
       : !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);

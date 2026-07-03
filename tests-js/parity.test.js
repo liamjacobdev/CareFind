@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import logic from '../carefind.logic.js';
+import logic from '../innetwork.logic.js';
 
 // Vitest runs from the repo root; the jsdom env makes import.meta.url an http URL,
 // so resolve the shared fixture from cwd instead.

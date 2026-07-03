@@ -1,15 +1,15 @@
 # Keep the Vercel deployment lean and under the function size limit. The runtime needs
-# only: app/ (traced from the import), the carefind* static assets + carefind.db.gz seed
+# only: app/ (traced from the import), the innetwork* static assets + innetwork.db.gz seed
 # (pulled in via vercel.json includeFiles), and requirements.txt.
 
-# The uncompressed 98 MB DB — the function inflates carefind.db.gz to /tmp instead.
-carefind.db
-carefind.db-wal
-carefind.db-shm
+# The uncompressed 98 MB DB — the function inflates innetwork.db.gz to /tmp instead.
+innetwork.db
+innetwork.db-wal
+innetwork.db-shm
 
-# Node/JS toolchain — the frontend bundle (carefind.bundle.js) is prebuilt + committed,
+# Node/JS toolchain — the frontend bundle (innetwork.bundle.js) is prebuilt + committed,
 # so Vercel must NOT see package.json (it would detect a Node project, run npm, and expect
-# a static output directory — and fail). Keep carefind.config.js: it's served at runtime.
+# a static output directory — and fail). Keep innetwork.config.js: it's served at runtime.
 package.json
 package-lock.json
 build.mjs

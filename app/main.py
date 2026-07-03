@@ -1,4 +1,4 @@
-"""CareFind backend — proxies NPPES + Nominatim, batches geocoding, and resolves
+"""InNetwork backend — proxies NPPES + Nominatim, batches geocoding, and resolves
 real insurance acceptance. Deploy behind TLS on your own domain (see README)."""
 import logging
 import time
@@ -22,7 +22,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
-log = logging.getLogger("carefind")
+log = logging.getLogger("innetwork")
 # httpx logs each outbound request line ("HTTP Request: GET <url> ...") at INFO — and
 # our NPPES/geocode/FHIR URLs carry search terms (a user's ZIP, name) in the query. Pin
 # it to WARNING so those URLs are never persisted to logs (D3 PII rule).
@@ -39,31 +39,31 @@ _POOL_CEILING_LARGE = 200
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     db.init_db()
     registry.build()
-    log.info("CareFind up: %d Medicare NPIs, %d insurance plans available",
+    log.info("InNetwork up: %d Medicare NPIs, %d insurance plans available",
              db.medicare_count(), len(registry.plans()))
     log.info("Geocoder: %s", geocode.active_geocoder())
     if not geocode.census_enabled() and settings.ua_is_placeholder:
         # Census is off AND the Nominatim UA is a placeholder → geocoding is broken.
         # (With Census on, a placeholder UA only disables the optional fallback.)
         log.warning(
-            "Geocoding will fail: GEOCODE_USE_CENSUS is off and CAREFIND_UA is the "
-            "placeholder, which Nominatim rejects (HTTP 403). Set CAREFIND_UA to your "
+            "Geocoding will fail: GEOCODE_USE_CENSUS is off and INNETWORK_UA is the "
+            "placeholder, which Nominatim rejects (HTTP 403). Set INNETWORK_UA to your "
             "email, or enable the keyless US Census geocoder (GEOCODE_USE_CENSUS=true)."
         )
     yield
     # Graceful shutdown (D4): uvicorn stops accepting connections and drains in-flight
     # requests on SIGTERM; per-request httpx clients close in their own `async with`,
     # so there's nothing to leak here — just record the clean stop.
-    log.info("CareFind shutting down")
+    log.info("InNetwork shutting down")
 
 
-app = FastAPI(title="CareFind API", version="3.1", lifespan=lifespan)
+app = FastAPI(title="InNetwork API", version="3.1", lifespan=lifespan)
 
 # ── Per-client rate limiting ─────────────────────────────────────────────────
 # Stops this open proxy from being driven to hammer NPPES/Nominatim. Behind the
 # RateLimiter seam (app/interfaces.py): in-process per-worker by default; swap a
 # shared backend (e.g. Redis) for a hard global cap across workers (D4) by setting
-# CAREFIND_RATE_LIMITER. Registered before CORS below so CORS stays outermost and
+# INNETWORK_RATE_LIMITER. Registered before CORS below so CORS stays outermost and
 # 429s carry CORS headers.
 _limiter = build_rate_limiter()
 

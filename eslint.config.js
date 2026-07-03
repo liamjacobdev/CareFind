@@ -6,7 +6,7 @@ import globals from 'globals';
 export default [
   {
     ignores: [
-      'carefind.bundle.js',
+      'innetwork.bundle.js',
       'node_modules/**',
       'coverage/**',
       'test-results/**',
@@ -29,7 +29,7 @@ export default [
   {
     // Browser app code: the page bundle source, the injected config, the pure logic,
     // and the tiny pre-paint theme init (classic <head> script, not a module).
-    files: ['src/**/*.js', 'carefind.logic.js', 'carefind.config.js'],
+    files: ['src/**/*.js', 'innetwork.logic.js', 'innetwork.config.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -37,7 +37,7 @@ export default [
     },
   },
   {
-    files: ['carefind.theme.js'],
+    files: ['innetwork.theme.js'],
     languageOptions: { ecmaVersion: 2022, sourceType: 'script', globals: globals.browser },
   },
   {

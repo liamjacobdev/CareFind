@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';
 
-const PAGE = pathToFileURL(join(process.cwd(), 'carefind.html')).href;
+const PAGE = pathToFileURL(join(process.cwd(), 'innetwork.html')).href;
 
 test('shows an honest "start the backend" state when the backend is unreachable', async ({ page }) => {
   // Abort every backend call so it behaves exactly like "backend not running"
@@ -18,7 +18,7 @@ test('shows an honest "start the backend" state when the backend is unreachable'
   await page.click('#search-btn');
 
   const list = page.locator('#results-list');
-  await expect(list).toContainText('Start the CareFind backend');
+  await expect(list).toContainText('Start the InNetwork backend');
   await expect(list).toContainText('uvicorn app.main:app');
   // It must NOT pretend a search succeeded.
   await expect(list.locator('.provider-card')).toHaveCount(0);

@@ -1,9 +1,9 @@
-// Unit tests for the extracted pure frontend logic (carefind.logic.js).
+// Unit tests for the extracted pure frontend logic (innetwork.logic.js).
 // These are the Node-side guard the page lacked; they also lock the
 // buildProviders <-> backend normalize() contract (T1.5) and the NPPES query
 // construction (mirrors tests/test_nppes.py).
 import { describe, it, expect } from 'vitest';
-import logic from '../carefind.logic.js';
+import logic from '../innetwork.logic.js';
 
 const {
   esc,

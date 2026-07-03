@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared golden record for the cross-language normalize parity test (T1.5). The Python backend normalize() (app/main.py) and the JS frontend buildProviders() (carefind.logic.js) must both produce these structural fields for this NPPES record. Renaming or changing a field on either side breaks its test. Phone/fax are intentionally excluded: the backend returns them raw and the frontend formats them downstream.",
+  "_comment": "Shared golden record for the cross-language normalize parity test (T1.5). The Python backend normalize() (app/main.py) and the JS frontend buildProviders() (innetwork.logic.js) must both produce these structural fields for this NPPES record. Renaming or changing a field on either side breaks its test. Phone/fax are intentionally excluded: the backend returns them raw and the frontend formats them downstream.",
   "record": {
     "number": "1003000126",
     "enumeration_type": "NPI-1",
