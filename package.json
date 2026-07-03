@@ -14,7 +14,7 @@
     "test:e2e": "playwright test --project=chromium --project=firefox --project=webkit"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.11.3",
+    "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.49.1",
     "@vitest/coverage-v8": "^2.1.8",
