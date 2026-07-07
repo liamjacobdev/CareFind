@@ -2,34 +2,37 @@
 
 This is the **cardless, free** deployment path: InNetwork runs as a single Vercel Python
 serverless function that serves both the page and the API (same origin → no CORS), with
-the 2.5M-row Medicare index shipped as a gzipped SQLite seed in the deployment. No credit
-card, no database service, no separate frontend host.
+verified insurance shipped as compact **Roaring membership bitmaps** in the deployment. No
+credit card, no database service, no separate frontend host.
 
 ## Why this works (first principles)
 
 Vercel functions have a **read-only bundle filesystem** and an **ephemeral, writable
-`/tmp`**. InNetwork's data path — Medicare/TiC acceptance lookups — is **read-only at serve
-time**, so we don't need a managed database at all:
+`/tmp`**. Verified insurance is a set-membership test against a bitmap, so it's **read-only
+at serve time** — no managed database, and no cold-start inflate:
 
-- The seed `innetwork.db.gz` (~27 MB) ships in the deployment; `api/index.py` inflates it
-  to `/tmp/innetwork.db` once per cold start (~98 MB, well under `/tmp`'s 512 MB).
-- The few cache writes (FHIR/geocode) then land in that writable `/tmp` copy — ephemeral
-  per instance, which is fine (they're best-effort and re-derivable).
+- Each verified payer's in-network NPI set is a `payers/<id>.roaring` bitmap (e.g. all
+  2.5M Medicare NPIs in ~5 MB) plus a `payers/manifest.json`. They ship in the bundle and
+  are **mmap'd read-only** straight from the read-only filesystem — nothing is inflated or
+  copied to `/tmp`, so cold start has no seed step.
+- The only writable state is an ephemeral cache DB (live-FHIR results + geocodes) created
+  fresh in `/tmp/innetwork.db` per instance — best-effort and re-derivable.
 - Geocoding uses the **keyless US Census geocoder** (no API key, no rate limit), so the
   per-process Nominatim throttle isn't needed.
 - The per-process rate limiter is disabled (`RATE_LIMIT_MAX=0`) — it's meaningless across
   isolated serverless instances; rely on Vercel's platform protections.
 
-Total function size (~27 MB seed + Python deps) sits comfortably under Vercel's ~250 MB
-limit. Everything is verified locally via the cold-start simulation in the repo history.
+Total function size (a few MB of bitmaps + Python deps) sits far under Vercel's ~250 MB
+limit — headroom for 20-30 payers. Verified locally via the cold-start simulation.
 
 ## Deploy (cardless, ~5 minutes)
 
 1. **Create a free Vercel account** at https://vercel.com (GitHub login; no card for the
    Hobby plan).
-2. **Push this repo to GitHub** (the `innetwork.db.gz` seed is committed, so the deploy is
-   self-contained). On Vercel: **Add New → Project → import the repo**. Vercel detects
+2. **Push this repo to GitHub** (the `payers/*.roaring` bitmaps are committed, so the deploy
+   is self-contained). On Vercel: **Add New → Project → import the repo**. Vercel detects
    `vercel.json` + `api/index.py` and the Python runtime automatically; click Deploy.
+   (`vercel.json`'s `includeFiles` bundles the `payers/` bitmaps into the function.)
 3. **Point the page at your URL once.** After the first deploy you know your origin
    (`https://<project>.vercel.app`). Vercel serves `innetwork.config.js` as a *static* CDN
    asset (it bypasses the app's same-origin route), so bake the origin in and push:
@@ -53,34 +56,41 @@ curl -s https://<project-name>.vercel.app/readyz     # -> 200
 curl -s https://<project-name>.vercel.app/healthz    # -> 200 (503 = data stale)
 curl -s https://<project-name>.vercel.app/api/insurance/plans | python3 -c \
   "import sys,json;print(sorted(p['id'] for p in json.load(sys.stdin)['plans'] if p['confidence']=='verified'))"
-# expect: ['cigna','humana','medicare','priority_partners','unitedhealthcare']
+# expect: ['cigna','excellus','humana','medicare','priority_partners','unitedhealthcare']
 ```
 
 ## Refreshing the data (automated)
 
-The seed is a point-in-time snapshot. **It refreshes itself**:
-[`.github/workflows/refresh-medicare-seed.yml`](../.github/workflows/refresh-medicare-seed.yml)
-runs quarterly (and on demand via *Actions → Refresh Medicare seed → Run workflow*). It
-auto-discovers the current CMS enrollment CSV from `data.cms.gov`'s DCAT catalog (no
-hard-coded dated URL), rebuilds `innetwork.db.gz`, and commits it **only if it changed** —
-which triggers Vercel's GitHub integration to redeploy. No secrets needed (just the
-default `GITHUB_TOKEN`).
-
-To refresh manually instead:
+The bitmaps are point-in-time snapshots, each stamped with a `fetched_at` + freshness SLO
+in `manifest.json` — `/healthz` flips to **503** when any served payer goes stale, the
+dead-man's-switch an uptime monitor watches. Refresh a payer by re-harvesting its bitmap
+and committing `payers/`, which triggers Vercel's GitHub integration to redeploy:
 
 ```bash
-python -c "from app.cms_catalog import latest_medicare_csv_url as u; print(u())"  # current CSV
-python -m app.ingest_medicare "<that-url>"                 # rebuild ./innetwork.db
-gzip -9 -c innetwork.db > innetwork.db.gz                    # rebuild the seed
-git commit -am "data: refresh Medicare seed" && git push  # Vercel auto-redeploys
+# Medicare — rebuild the bitmap from the current CMS enrollment file (auto-discovered):
+python -c "from app.cms_catalog import latest_medicare_csv_url as u; print(u())"   # current CSV
+python -m app.build_membership medicare "<that-url>"       # rebuild payers/medicare.roaring
+
+# A FHIR-directory payer (Rail 1) — offline-harvest its whole network:
+python -m app.harvest_fhir cigna                           # rebuild payers/cigna.roaring
+
+# A TiC payer (Rail 2) — stream its in-network file(s):
+python -m app.harvest_tic aetna "<tic-index-or-file-url>"  # rebuild payers/aetna.roaring
+
+git commit -am "data: refresh payer bitmaps" && git push   # Vercel auto-redeploys
 ```
+
+The heavy harvests (the national giants) are meant to run on a **public** GitHub Actions
+matrix (unlimited free minutes on a public repo), sharded by facet, committing only the
+bitmaps that changed. A failed harvest keeps the last-good bitmap and surfaces staleness —
+it never ships an empty or partial "verified" set.
 
 ## Known trade-offs (honest)
 
-- **Cold starts** re-inflate the seed (~1 s) and rebuild the registry; first hit after idle
-  is slower. Vercel keeps warm instances under traffic.
+- **Cold starts** just mmap the bitmaps + rebuild the registry (no seed inflate); first hit
+  after idle is fast. Vercel keeps warm instances under traffic.
 - **No durable write persistence** — the FHIR/geocode caches reset per instance/cold start.
-  The valuable data (Medicare/TiC) is read-only and always present from the seed.
+  The valuable data (the membership bitmaps) is read-only and always present in the bundle.
 - **First payer-filtered search** makes live FHIR calls per NPI (bounded, concurrent,
   cached for the instance's life); an unfiltered search makes zero and is fast.
 

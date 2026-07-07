@@ -1,11 +1,14 @@
 # Keep the Vercel deployment lean and under the function size limit. The runtime needs
-# only: app/ (traced from the import), the innetwork* static assets + innetwork.db.gz seed
-# (pulled in via vercel.json includeFiles), and requirements.txt.
+# only: app/ (traced from the import), the innetwork* static assets + the payers/*.roaring
+# membership bitmaps (both pulled in via vercel.json includeFiles), and requirements.txt.
 
-# The uncompressed 98 MB DB — the function inflates innetwork.db.gz to /tmp instead.
+# The local SQLite files hold only ephemeral caches now; the function creates a fresh one
+# in /tmp. Verified insurance is served from the read-only payers/ bitmaps (mmap'd), so
+# the old gzipped SQLite seed is no longer shipped or inflated.
 innetwork.db
 innetwork.db-wal
 innetwork.db-shm
+innetwork.db.gz
 
 # Node/JS toolchain — the frontend bundle (innetwork.bundle.js) is prebuilt + committed,
 # so Vercel must NOT see package.json (it would detect a Node project, run npm, and expect

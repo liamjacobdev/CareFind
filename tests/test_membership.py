@@ -156,6 +156,34 @@ async def test_not_loaded_source_answers_unknown(tmp_path):
 
 
 # ── Registry integration: harvested payer is verified-by-default, supersedes legacy ──
+def test_healthz_freshness_and_coverage_read_the_manifest(tmp_path, temp_db):
+    """A harvested payer's freshness comes from its manifest entry, so a stale BITMAP trips
+    the /healthz dead-man's-switch (not just a stale sqlite ingest), and /coverage counts
+    its NPIs from the store."""
+    from app import coverage as cov
+    from app import routes_ops
+    from app.insurance import registry as global_registry
+
+    _write(tmp_path, PRESENT, id="cigna", method="fhir-plannet",
+           fetched_at=time.time() - 100 * 86400, max_age_days=45)  # stale
+    old_dir, old_use = settings.membership_dir, settings.use_membership
+    settings.membership_dir, settings.use_membership = str(tmp_path), True
+    try:
+        global_registry.build()
+        fresh = routes_ops._data_freshness()
+        cigna = next(s for s in fresh["sources"] if s["source"] == "cigna")
+        assert cigna["stale"] is True and cigna["method"] == "fhir-plannet"
+        assert cigna["count"] == len(PRESENT)
+        assert "cigna" in fresh["stale"] and fresh["slos_met"] is False
+        rep = cov.coverage_report(global_registry)
+        assert rep["verified_counts"]["cigna"] == len(PRESENT)
+    finally:
+        if global_registry.membership_store:
+            global_registry.membership_store.close()
+        settings.membership_dir, settings.use_membership = old_dir, old_use
+        global_registry.build()  # restore the hermetic (empty) registry
+
+
 @pytest.mark.asyncio
 async def test_membership_medicare_supersedes_legacy_and_is_on_by_default(tmp_path, temp_db):
     _write(tmp_path, PRESENT, id="medicare", label="Medicare (Original)",

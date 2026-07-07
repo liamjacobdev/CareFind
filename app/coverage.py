@@ -35,13 +35,18 @@ def coverage_report(reg: Registry) -> dict[str, Any]:
 
     programs: list[dict[str, Any]] = []
     counts: dict[str, int] = {}
+    store = reg.membership_store
     for s in verified:
         scope = sorted(s.states) if s.states else None  # None -> national
         programs.append({"id": s.id, "label": s.label, "category": s.category,
                          "level": s.level, "scope": scope})
-        # Record counts we actually hold locally (Medicare file, TiC ingests). Live FHIR
-        # sources have no local NPI count, so they're reported as available (no count).
-        if s.id == "medicare":
+        # Record the local NPI count behind each verified source. A harvested membership
+        # bitmap reports its cardinality; the legacy Medicare file / TiC ingests report
+        # their row counts. Live FHIR sources hold no local set, so they're available
+        # (no count).
+        if store is not None and store.loaded(s.id):
+            counts[s.id] = store.count(s.id)
+        elif s.id == "medicare":
             counts[s.id] = db.medicare_count()
         elif db.tic_count(s.id) > 0:
             counts[s.id] = db.tic_count(s.id)

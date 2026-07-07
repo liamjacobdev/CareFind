@@ -696,7 +696,7 @@
     },
     "/healthz": {
       "get": {
-        "description": "Liveness + data-freshness. Flips to 503 (the dead-man's-switch an uptime monitor\nwatches) when a tracked source has gone stale past its SLO.",
+        "description": "Liveness + data-freshness. Flips to 503 (the dead-man's-switch an uptime monitor\nwatches) when a tracked source \u2014 harvested bitmap or legacy ingest \u2014 has gone stale.",
         "operationId": "healthz_healthz_get",
         "responses": {
           "200": {

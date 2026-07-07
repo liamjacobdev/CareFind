@@ -1,15 +1,18 @@
-# Auto-refresh the baked Medicare seed for the cardless Vercel deploy (docs/deploy.md).
+# Auto-refresh the baked Medicare membership bitmap for the cardless Vercel deploy
+# (docs/deploy.md).
 #
-# The Vercel deployment serves a read-only SQLite seed (innetwork.db.gz) baked into the
-# repo. CMS republishes the Medicare Fee-For-Service enrollment file quarterly, so this
-# workflow rebuilds the seed from the *current* CSV (auto-discovered from data.cms.gov's
-# DCAT catalog — no hard-coded dated URL) and commits it. The push triggers Vercel's
-# GitHub integration to redeploy automatically.
+# The Vercel deployment serves verified insurance from read-only Roaring bitmaps baked into
+# the repo (payers/*.roaring). CMS republishes the Medicare Fee-For-Service enrollment file
+# quarterly, so this workflow rebuilds the Medicare bitmap from the *current* CSV
+# (auto-discovered from data.cms.gov's DCAT catalog — no hard-coded dated URL) and commits
+# payers/. The push triggers Vercel's GitHub integration to redeploy automatically.
 #
-# Runs on the 1st of Jan/Apr/Jul/Oct (just after CMS's quarterly update) and on demand.
-# The commit only happens when the seed actually changed, so an unchanged quarter is a
-# no-op. Requires no secrets — only the default GITHUB_TOKEN with contents:write.
-name: Refresh Medicare seed
+# Runs on the 1st-ish of Jan/Apr/Jul/Oct (just after CMS's quarterly update) and on demand.
+# The manifest's fetched_at bumps every run (refreshing the freshness SLO clock so a healthy
+# quarter never trips /healthz's dead-man's-switch); the multi-MB bitmap blob only changes
+# when the enrolled-NPI set actually changed. Requires no secrets — only the default
+# GITHUB_TOKEN with contents:write.
+name: Refresh Medicare bitmap
 
 on:
   schedule:
@@ -25,7 +28,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: refresh-medicare-seed
+  group: refresh-medicare-bitmap
   cancel-in-progress: false
 
 jobs:
@@ -54,26 +57,23 @@ jobs:
             echo "csv=$url" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Rebuild the SQLite index from the current CSV
+      - name: Rebuild the Medicare membership bitmap from the current CSV
         env:
-          INNETWORK_DB: ./innetwork.db
+          INNETWORK_DB: ./innetwork.db   # scratch sqlite the builder ingests into, then ports
         run: |
           rm -f innetwork.db
-          python -m app.ingest_medicare "${{ steps.url.outputs.csv }}"
-          python -c "from app import db; n=db.medicare_count(); print('medicare rows:', n); assert n > 1_000_000, 'suspiciously few rows — refusing to ship'"
+          python -m app.build_membership medicare "${{ steps.url.outputs.csv }}"
+          python -c "import json; n=json.load(open('payers/manifest.json'))['payers']['medicare']['count']; print('medicare NPIs:', n); assert n > 1_000_000, 'suspiciously few — refusing to ship'"
 
-      - name: Compress to the deploy seed
-        run: gzip -9 -c innetwork.db > innetwork.db.gz
-
-      - name: Commit the seed if it changed
+      - name: Commit the refreshed bitmap + manifest
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- innetwork.db.gz; then
-            echo "Seed unchanged this quarter — nothing to commit."
+          git add payers/medicare.roaring payers/manifest.json
+          if git diff --cached --quiet; then
+            echo "Bitmap + manifest unchanged — nothing to commit."
           else
-            git add innetwork.db.gz
-            git commit -m "data: refresh Medicare seed (auto)"
+            git commit -m "data: refresh Medicare bitmap (auto)"
             git push
-            echo "Pushed a refreshed seed — Vercel will redeploy."
+            echo "Pushed a refreshed Medicare bitmap — Vercel will redeploy."
           fi

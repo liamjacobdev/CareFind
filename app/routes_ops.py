@@ -16,14 +16,32 @@ log = logging.getLogger("innetwork")
 
 
 def _data_freshness() -> dict[str, Any]:
-    """Per-source data ages vs their SLOs (C3). A source is 'stale' when its last
-    ingest is older than its budget — Medicare quarterly, TiC payers monthly. A source
-    that was never ingested has no row here and so never trips the switch (that's a
-    setup state, not a stalled ingest)."""
+    """Per-source data ages vs their SLOs (C3). A source is 'stale' when its data is older
+    than its budget — Medicare quarterly, harvested payers monthly. A source that was never
+    ingested has no row here and so never trips the switch (a setup state, not a stall).
+
+    The served verified tier is now the harvested membership bitmaps, so freshness comes
+    first from each payer's MANIFEST entry (its per-payer fetched_at + max_age_days + NPI
+    count) — that's what makes a stale *bitmap* trip the dead-man's-switch, not just a stale
+    sqlite ingest. Any legacy sqlite-backed source not served by a bitmap is folded in after.
+    """
     now = time.time()
     sources: list[dict[str, Any]] = []
     stale: list[str] = []
+    seen: set[str] = set()
+    store = registry.membership_store
+    if store is not None:
+        for e in sorted(store.payers(), key=lambda x: x.id):
+            is_stale = e.is_stale(now)
+            sources.append({"source": e.id, "age_days": round(e.age_days(now), 1),
+                            "slo_days": e.max_age_days, "stale": is_stale,
+                            "method": e.method, "count": e.count})
+            seen.add(e.id)
+            if is_stale:
+                stale.append(e.id)
     for sid, (_url, ts) in sorted(db.source_meta_all().items()):
+        if sid in seen:  # already reported from the manifest (the served source)
+            continue
         max_days = settings.medicare_max_age_days if sid == "medicare" else settings.payer_max_age_days
         age_days = (now - ts) / 86400.0
         is_stale = age_days > max_days
@@ -34,14 +52,23 @@ def _data_freshness() -> dict[str, Any]:
     return {"sources": sources, "stale": stale, "slos_met": not stale}
 
 
+def _medicare_count() -> int:
+    """The served Medicare NPI count — the harvested bitmap's cardinality when it backs
+    Medicare, else the legacy sqlite index count."""
+    store = registry.membership_store
+    if store is not None and store.loaded("medicare"):
+        return store.count("medicare")
+    return db.medicare_count()
+
+
 @router.get("/healthz")
 def healthz(response: Response) -> dict[str, Any]:
     """Liveness + data-freshness. Flips to 503 (the dead-man's-switch an uptime monitor
-    watches) when a tracked source has gone stale past its SLO."""
+    watches) when a tracked source — harvested bitmap or legacy ingest — has gone stale."""
     fresh = _data_freshness()
     if not fresh["slos_met"]:
         response.status_code = 503
-    return {"ok": fresh["slos_met"], "medicare_npis": db.medicare_count(),
+    return {"ok": fresh["slos_met"], "medicare_npis": _medicare_count(),
             "insurance_plans": registry.plans(), "data_freshness": fresh}
 
 

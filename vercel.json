@@ -3,7 +3,7 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 60,
-      "includeFiles": "innetwork*"
+      "includeFiles": "{innetwork*,payers/*}"
     }
   },
   "headers": [
