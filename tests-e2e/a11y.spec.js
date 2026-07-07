@@ -92,7 +92,7 @@ test('a11y: welcome / initial state', async ({ page }) => {
   await scan(page, 'welcome');
 });
 
-test('a11y: results list + insurance filter (verified and estimated)', async ({ page }) => {
+test('a11y: results list + insurance filter (verified tier)', async ({ page }) => {
   await mock(page);
   await page.goto(PAGE);
   await page.fill('#zip-input', '32536');
@@ -100,10 +100,9 @@ test('a11y: results list + insurance filter (verified and estimated)', async ({ 
   await expect(page.locator('#results-list .provider-card').first()).toBeVisible();
   await scan(page, 'results list');
 
-  // Reveal the estimated tier too (a distinct state).
-  await page.locator('[data-action="ins-mode"][data-mode="any"]').click();
+  // The insurance filter surfaces the verified plan chips (estimated tier removed).
   await expect(page.locator('.ins-chip').first()).toBeVisible();
-  await scan(page, 'insurance filter with estimated shown');
+  await scan(page, 'insurance filter');
 });
 
 test('a11y: provider detail drawer open', async ({ page }) => {

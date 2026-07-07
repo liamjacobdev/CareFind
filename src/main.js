@@ -191,7 +191,6 @@ const state = {
   plans: [],
   categories: [],
   selectedPlans: [],
-  insMode: 'verified',
   radius: 0,
   backendReachable: null,
 };
@@ -665,8 +664,9 @@ async function backendSearch(f) {
   if (f.type) p.set('type', f.type);
   if (f.name) p.set('name', f.name);
   if (state.selectedPlans.length) {
+    // Verified-only filtering — every surfaced plan is a verified source; the estimated
+    // ('any') match mode was removed with the estimated tier (backend defaults to verified).
     p.set('accepts', state.selectedPlans.join(','));
-    p.set('accepts_mode', state.insMode || 'verified');
   }
   let res;
   try {
@@ -768,27 +768,23 @@ function renderInsuranceFilter() {
     state.categories && state.categories.length
       ? state.categories
       : [{ id: 'all', label: 'Plans', plans: state.plans }];
-  // Verified-by-default: estimated payers are hidden until the user opts in via
-  // "Include estimated", so the default filter offers only Confirmed plans.
-  const showEstimated = state.insMode === 'any';
+  // Verified tier only. A payer is offered as a filter solely when InNetwork can confirm
+  // acceptance from a real source for each provider — a harvested membership set, a
+  // live-validated FHIR directory, or the CMS Medicare file. Unverifiable "estimated"
+  // catalog payers are deliberately not surfaced: the product shows what it can prove.
   const groups = cats
     .map((c) => {
-      const plans = c.plans.filter((pl) => showEstimated || pl.confidence === 'verified');
+      const plans = c.plans.filter((pl) => pl.confidence === 'verified');
       if (!plans.length) return '';
       const chips = plans
         .map((pl) => {
           const on = state.selectedPlans.includes(pl.id);
-          const conf = pl.confidence === 'verified' ? 'verified' : 'estimated';
           const title =
-            conf !== 'verified'
-              ? pl.filterable === false
-                ? 'Operates in your area — context only, won’t narrow results'
-                : 'Estimated — confirm with the provider'
-              : pl.level === 'plan'
-                ? 'Verified from a real source'
-                : 'Verified network directory — confirm your specific plan';
+            pl.level === 'plan'
+              ? 'Verified from a real source'
+              : 'Verified network directory — confirm your specific plan';
           return `<button type="button" role="checkbox" aria-checked="${on ? 'true' : 'false'}" class="ins-chip ${on ? 'checked' : ''}" data-action="toggle-plan" data-plan="${esc(pl.id)}" title="${esc(title)}">
-        <span class="tick">${on ? CHECK_SVG : ''}</span>${esc(pl.label)}<span class="conf-dot ${conf}" aria-hidden="true"></span></button>`;
+        <span class="tick">${on ? CHECK_SVG : ''}</span>${esc(pl.label)}<span class="conf-dot verified" aria-hidden="true"></span></button>`;
         })
         .join('');
       const gid = `ins-group-${esc(c.id)}`;
@@ -796,30 +792,8 @@ function renderInsuranceFilter() {
     })
     .filter(Boolean)
     .join('');
-  const mode = showEstimated ? 'any' : 'verified';
-  const legend = showEstimated
-    ? `<p class="ins-legend"><span class="conf-dot verified" aria-hidden="true"></span> Confirmed from a real source <span class="conf-dot estimated" aria-hidden="true"></span> Likely — confirm with provider</p>`
-    : `<p class="ins-legend"><span class="conf-dot verified" aria-hidden="true"></span> Confirmed from a real source — turn on “Include estimated” to also see likely (unconfirmed) plans.</p>`;
-  wrap.innerHTML = `
-    <div class="ins-mode" role="group" aria-label="Match strictness">
-      <button type="button" class="${mode === 'verified' ? 'active' : ''}" aria-pressed="${mode === 'verified' ? 'true' : 'false'}" data-action="ins-mode" data-mode="verified">Verified only</button>
-      <button type="button" class="${mode === 'any' ? 'active' : ''}" aria-pressed="${mode === 'any' ? 'true' : 'false'}" data-action="ins-mode" data-mode="any">Include estimated</button>
-    </div>
-    ${legend}
-    <div class="ins-groups">${groups}</div>`;
-}
-function setInsMode(m) {
-  state.insMode = m === 'any' ? 'any' : 'verified';
-  // Switching back to verified-only drops any estimated selections, so a now-hidden
-  // estimate can't silently keep filtering results.
-  if (state.insMode !== 'any') {
-    state.selectedPlans = state.selectedPlans.filter((id) => {
-      const pm = planMeta(id);
-      return pm && pm.confidence === 'verified';
-    });
-  }
-  renderInsuranceFilter();
-  if (state.providers && state.providers.length) renderCards(); // badges reflect the new mode
+  const legend = `<p class="ins-legend"><span class="conf-dot verified" aria-hidden="true"></span> Confirmed from a real source for each provider — never a guess.</p>`;
+  wrap.innerHTML = `${legend}<div class="ins-groups">${groups}</div>`;
 }
 function togglePlan(id) {
   const i = state.selectedPlans.indexOf(id);
@@ -1037,25 +1011,19 @@ function insuranceBadgesHtml(doc) {
       } else {
         out.push(`<span class="ins-badge innet${staleCls}">${esc(planLabel(id))} · in-network${dated}</span>`); // payer network listing, not plan acceptance
       }
-    } else if (state.insMode === 'any' && state.selectedPlans.includes(id)) {
-      const pm = planMeta(id);
-      const txt =
-        pm && pm.filterable === false
-          ? `${esc(planLabel(id))} · operates here` // national estimate: area context, not a provider-specific match
-          : `${esc(planLabel(id))} · likely`;
-      out.push(`<span class="ins-badge likely">${txt}</span>`); // amber, only when estimates are opted into AND filtered
     }
+    // No estimated badges: only verified answers earn a badge. The estimated tier was
+    // removed — an unverifiable "likely" is not shown as if it were provider-specific.
   }
   return out.join('');
 }
 function coverageHtml(doc, insSearch) {
   const ins = doc.insurance || {};
-  // Show every verified result, plus — only when estimates are opted into — the
-  // estimated plans the user actually filtered on. Verified-by-default otherwise.
+  // Show every verified result. The estimated tier was removed, so an unconfirmed catalog
+  // guess never appears in the coverage list.
   const ids = Object.keys(ins).filter((id) => {
     const info = ins[id];
-    if (!info) return false;
-    return info.confidence === 'verified' || (state.insMode === 'any' && state.selectedPlans.includes(id));
+    return info && info.confidence === 'verified';
   });
   if (HAS_BACKEND && ids.length) {
     ids.sort((a, b) => {
@@ -1079,7 +1047,7 @@ function coverageHtml(doc, insSearch) {
       })
       .join('');
     return `<div class="cov-list">${items}</div>
-      <p style="font-size:.7rem;color:var(--faint);margin:9px 0 0;line-height:1.5;"><b>Confirmed</b> = enrolled in a specific program (e.g. official Medicare). <b>In-network</b> = listed in this payer's network directory — confirm your specific plan. <b>Likely</b> = a major payer operating in this area, not provider-specific. <a href="${insSearch}" target="_blank" rel="noopener">Confirm directly</a>.</p>`;
+      <p style="font-size:.7rem;color:var(--faint);margin:9px 0 0;line-height:1.5;"><b>Confirmed</b> = enrolled in a specific program (e.g. official Medicare). <b>In-network</b> = listed in this payer's network directory — confirm your specific plan. <a href="${insSearch}" target="_blank" rel="noopener">Confirm directly</a>.</p>`;
   }
   return `<div class="coverage-note">
       <b>Insurance networks are not part of the public registry.</b> This standalone build shows the official CMS record, which does not list accepted plans. Connect the InNetwork backend to enable verified Medicare and payer-network filtering. Until then, confirm coverage directly before booking.
@@ -1176,28 +1144,6 @@ function showBackendRequired() {
   byId('results-count-header').textContent = '';
   updateResultsBar();
 }
-/* Honest signal for the estimated tier: when "Include estimated" is on and the
-   filtered plans matched NObody with a verified record, the only matches are
-   estimated — a national payer that "operates in your area" matches every provider
-   in-state, so the filter doesn't actually narrow results. Say so plainly rather
-   than implying these are provider-specific confirmations. */
-function estimatedFilterHint() {
-  if (state.insMode !== 'any' || !state.selectedPlans.length) return '';
-  const anyVerified = state.providers.some((p) => {
-    const ins = p.insurance || {};
-    return state.selectedPlans.some((id) => ins[id] && ins[id].value === true && ins[id].confidence === 'verified');
-  });
-  if (anyVerified) return '';
-  // If every selected estimate is a national "operates here" payer, it didn't narrow
-  // the list at all — say so plainly rather than implying these are matches.
-  const allContext = state.selectedPlans.every((id) => {
-    const pm = planMeta(id);
-    return pm && pm.filterable === false;
-  });
-  return allContext
-    ? ` <span class="results-hint">· these payers operate in your area but don’t narrow results — confirm acceptance with each provider</span>`
-    : ` <span class="results-hint">· estimated matches show plans likely available in this area, not confirmed for each provider</span>`;
-}
 function updateResultsBar() {
   const bar = byId('results-bar');
   const txt = byId('results-bar-text');
@@ -1218,7 +1164,7 @@ function updateResultsBar() {
         : `<b>${shown}</b> providers`;
     const near = state.centerLabel ? ` near ${esc(state.centerLabel)}` : '';
     const more = m && m.truncated ? ` <span class="results-hint">· refine your search to see more</span>` : '';
-    txt.innerHTML = `${count}${near}${estimatedFilterHint()}${more}`;
+    txt.innerHTML = `${count}${near}${more}`;
   } else if (state.activeTab === 'favorites' && Object.keys(state.favorites).length) {
     bar.style.display = 'flex';
     sortWrap.style.display = 'none';
@@ -1471,7 +1417,6 @@ function writeUrl(f) {
   if (f.limit && f.limit !== '25') p.set('limit', f.limit);
   // Keep the insurance filter in shared links so a sent search reproduces faithfully.
   if (state.selectedPlans.length) p.set('plans', state.selectedPlans.join(','));
-  if (state.insMode === 'any') p.set('ins', 'any');
   const qs = p.toString();
   history.replaceState(null, '', qs ? `?${qs}` : location.pathname);
 }
@@ -1501,7 +1446,6 @@ function readUrl() {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
-  if (p.get('ins') === 'any') state.insMode = 'any';
   if (state.plans.length) renderInsuranceFilter();
   if (p.get('name') || p.get('city') || p.get('st') || p.get('npi') || p.get('type')) openAdv(true);
   return true;
@@ -1695,9 +1639,6 @@ document.addEventListener('click', (e) => {
       break;
     case 'clear-plans':
       clearPlans();
-      break;
-    case 'ins-mode':
-      setInsMode(t.dataset.mode);
       break;
     case 'use-location':
       useLocation();
