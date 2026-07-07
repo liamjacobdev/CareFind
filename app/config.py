@@ -127,6 +127,16 @@ class Settings:
             "INNETWORK_USE_PLANET_REGISTRY", "true"
         ).strip().lower() in ("1", "true", "yes", "on")
 
+        # Harvested membership bitmaps (app/membership.py) — the rebuilt verified tier:
+        # each payer's in-network NPI set as a local Roaring bitmap, mmap'd read-only and
+        # answered instantly (no live per-NPI calls). `membership_dir` holds manifest.json
+        # + the per-payer .roaring blobs. On by default so a fresh clone gets instant,
+        # always-on verified coverage; tests point it at an empty dir for hermeticity.
+        self.use_membership = os.environ.get(
+            "INNETWORK_USE_MEMBERSHIP", "true"
+        ).strip().lower() in ("1", "true", "yes", "on")
+        self.membership_dir = os.environ.get("INNETWORK_MEMBERSHIP_DIR", "payers")
+
         # When the same process serves BOTH the page and the API (e.g. the Vercel
         # serverless deploy), serve innetwork.config.js with apiBase rewritten to the
         # request's own origin — so a fresh deploy works on first load with no

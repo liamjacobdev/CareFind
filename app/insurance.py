@@ -13,6 +13,7 @@ from . import planet_registry
 from .catalog import CATEGORY_ORDER, PAYER_CATALOG, category_label
 from .config import settings
 from .fhir_source import FhirPlanNetSource
+from .membership import MembershipStore
 from .sources import (
     _CONFIDENCE_RANK,
     Answer,
@@ -20,6 +21,7 @@ from .sources import (
     EstimatedPayerSource,
     InsuranceSource,
     MedicareSource,
+    MembershipSource,
     TicSource,
 )
 
@@ -27,23 +29,52 @@ log = logging.getLogger("innetwork.insurance")
 
 # Re-exported for a stable import path (tests, app.verify_payers, app.main).
 __all__ = ["Answer", "Ctx", "InsuranceSource", "MedicareSource", "TicSource",
-           "FhirPlanNetSource", "EstimatedPayerSource", "Registry", "registry"]
+           "FhirPlanNetSource", "MembershipSource", "EstimatedPayerSource",
+           "Registry", "registry"]
 
 class Registry:
     def __init__(self) -> None:
         self.sources: list[InsuranceSource] = []
+        # The mmap'd membership store, kept alive for the process lifetime so its bitmaps
+        # stay mapped. None until build() runs (or when membership is disabled).
+        self.membership_store: MembershipStore | None = None
 
     def build(self) -> None:
-        sources: list[InsuranceSource] = [MedicareSource()]
-        # Verified commercial payers wired via FHIR Plan-Net. Operator-configured
+        sources: list[InsuranceSource] = []
+
+        # 1) Verified tier — harvested membership bitmaps (the rebuilt core: an instant,
+        # local, always-on set-membership test). A harvested payer SUPERSEDES its legacy
+        # live-FHIR / sqlite source for the same id, so it costs zero per-NPI live calls.
+        membership_ids: set[str] = set()
+        self.membership_store = None
+        if settings.use_membership:
+            store = MembershipStore(settings.membership_dir)
+            try:
+                store.load()
+            except Exception as e:
+                log.warning("Membership store failed to load from %s: %s: %s",
+                            settings.membership_dir, type(e).__name__, e)
+            else:
+                for entry in store.payers():
+                    sources.append(MembershipSource(entry, store))
+                    membership_ids.add(entry.id)
+                self.membership_store = store
+
+        # 2) Medicare — legacy sqlite index, only if not already served by a bitmap.
+        if "medicare" not in membership_ids:
+            sources.append(MedicareSource())
+
+        # 3) Verified commercial payers still checked live via FHIR Plan-Net. Operator
         # payers.json takes precedence; the validated public registry (C1) fills in the
-        # rest so a fresh clone gets verified coverage out of the box. Dedup by id.
+        # rest. Any id already served by a local bitmap is skipped — no live calls for it.
         fhir_cfgs = list(settings.load_payers())
         configured_ids = {(c or {}).get("id") for c in fhir_cfgs}
         for cfg in planet_registry.validated_payer_configs():
             if cfg["id"] not in configured_ids:
                 fhir_cfgs.append(cfg)
         for cfg in fhir_cfgs:
+            if (cfg or {}).get("id") in membership_ids:
+                continue
             try:
                 sources.append(FhirPlanNetSource(cfg))
             except Exception as e:
@@ -51,15 +82,16 @@ class Registry:
                 # not vanish silently either — name the offending entry.
                 log.warning("Skipping FHIR payer entry %r: %s: %s",
                             (cfg or {}).get("id", cfg), type(e).__name__, e)
-        # Verified commercial payers ingested from Transparency-in-Coverage files.
-        # Always register one TiC source per catalog payer; availability is checked
-        # live (with a short TTL) like Medicare, so a payer ingested AFTER startup
-        # surfaces within seconds instead of waiting for a server restart.
+        # 4) Verified commercial payers from Transparency-in-Coverage sqlite ingests.
+        # Availability is checked live (short TTL) like Medicare, so a payer ingested
+        # AFTER startup surfaces within seconds. Skipped when a bitmap already serves it.
         for entry in PAYER_CATALOG:
+            if entry["id"] in membership_ids:
+                continue
             sources.append(
                 TicSource(entry["id"], entry["label"], entry.get("category", "commercial"))
             )
-        # Estimated tier: every catalog payer is also offered as a labeled estimate.
+        # 5) Estimated tier: every catalog payer is also offered as a labeled estimate.
         for entry in PAYER_CATALOG:
             sources.append(EstimatedPayerSource(entry))
         self.sources = sources
@@ -166,6 +198,12 @@ class Registry:
                 if pv:
                     result[npi][plan_id]["source_url"] = pv.get("source_url", "")
                     result[npi][plan_id]["fetched_at"] = pv.get("fetched_at")
+                    # A harvested payer past its freshness SLO stays a real verified True
+                    # (the data is there), but carries `stale` so the serve layer demotes
+                    # its badge to "confirmed <date>" instead of a fresh green — never a
+                    # silent stale green, and never flipped to a "no".
+                    if pv.get("stale"):
+                        result[npi][plan_id]["stale"] = True
         return result
 
 

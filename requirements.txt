@@ -4,3 +4,7 @@ fastapi==0.137.0
 uvicorn[standard]==0.49.0
 httpx==0.28.1
 pydantic==2.13.4
+# Roaring bitmaps back the verified membership store (app/membership.py): each payer's
+# in-network NPI set as a compact, mmap'd, O(1)-membership bitmap. Prebuilt wheels
+# (CRoaring) on Linux/macOS/Windows, so it installs cardless on Vercel's Python runtime.
+pyroaring==1.1.0

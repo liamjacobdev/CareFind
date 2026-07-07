@@ -21,6 +21,20 @@ def _hermetic_planet_registry():
         settings.use_planet_registry = old
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_membership(tmp_path_factory):
+    """Point the membership store at an empty temp dir so tests don't load the committed
+    payers/ bitmaps (e.g. the 5MB Medicare blob). Membership tests build their own store
+    in a tmp dir and load it directly; registry tests that want a bitmap set
+    settings.membership_dir explicitly."""
+    old = settings.membership_dir
+    settings.membership_dir = str(tmp_path_factory.mktemp("empty_membership"))
+    try:
+        yield
+    finally:
+        settings.membership_dir = old
+
+
 @pytest.fixture()
 def temp_db():
     fd, path = tempfile.mkstemp(suffix=".db")

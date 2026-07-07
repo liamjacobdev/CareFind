@@ -10,10 +10,13 @@ A source answers True / False / None; None ("unknown") is never turned into a ye
 import logging
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from . import db
 from .config import settings
+
+if TYPE_CHECKING:
+    from .membership import ManifestEntry, MembershipStore
 
 log = logging.getLogger("innetwork.insurance")
 
@@ -186,6 +189,66 @@ class TicSource(InsuranceSource):
             return {}
         url, ts = meta
         return {str(n): {"source_url": url, "fetched_at": ts} for n in npis}
+
+class MembershipSource(InsuranceSource):
+    """A verified payer backed by a harvested Roaring membership bitmap (app/membership.py).
+
+    This is the rebuilt verified tier: the payer's entire in-network NPI set was harvested
+    offline into a local bitmap, so answering is an instant set-membership test with NO
+    live call. That is what lets a verified payer be ON by default and nationwide —
+    `requires_network` stays False, unlike the live FhirPlanNetSource it supersedes.
+
+    Trust semantics, identical in kind to Medicare/TiC (the *when* moved offline, not the
+    *what*): the bitmap is the payer's complete harvested set, so a present NPI is a
+    verified in-network True and an absent one is a genuine False. A payer that isn't
+    loaded answers "unknown" (None) for everyone — never a fabricated "no". A hit's
+    provenance (source_url, fetched_at) and staleness ride along from the manifest.
+    """
+    confidence = "verified"
+    requires_network = False  # instant local bitmap lookup — verified-by-default
+
+    def __init__(self, entry: "ManifestEntry", store: "MembershipStore") -> None:
+        self.id = entry.id
+        self.payer = entry.id
+        self.label = entry.label
+        self.category = entry.category
+        self.level = entry.level                       # "plan" | "payer"
+        self.kind = "government" if entry.category in ("medicare", "medicaid") else "commercial"
+        # Regional scoping: a state-scoped harvest only answers for in-state providers;
+        # out-of-state NPIs are "unknown" (None), never a fabricated answer. None -> national.
+        self.states: set[str] | None = {s.upper() for s in entry.states} if entry.states else None
+        self.source_url = entry.source_url
+        self._store = store
+
+    def available(self) -> bool:
+        return self._store.loaded(self.id) and self._store.count(self.id) > 0
+
+    async def check(self, npi: str) -> Answer:
+        return self._store.has(self.id, npi) if self.available() else None
+
+    async def check_many(self, npis: list[str]) -> dict[str, Answer]:
+        if not self.available():
+            return {n: None for n in npis}
+        present = self._store.has_many(self.id, npis)
+        return {n: (n in present) for n in npis}
+
+    async def check_many_ctx(self, contexts: Ctx) -> dict[str, Answer]:
+        if self.states is None:
+            return await self.check_many(list(contexts.keys()))
+        in_state = [npi for npi, ctx in contexts.items()
+                    if (ctx or {}).get("state", "").upper() in self.states]
+        out: dict[str, Answer] = {npi: None for npi in contexts}
+        out.update(await self.check_many(in_state))
+        return out
+
+    def provenance_many(self, npis: list[str]) -> dict[str, dict[str, Any]]:
+        entry = self._store.entry(self.id)
+        if entry is None:
+            return {}
+        stale = entry.is_stale()
+        return {str(n): {"source_url": entry.source_url, "fetched_at": entry.fetched_at,
+                         "stale": stale} for n in npis}
+
 
 class EstimatedPayerSource(InsuranceSource):
     """A curated major payer (catalog). Estimated tier only.
