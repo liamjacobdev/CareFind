@@ -8,3 +8,7 @@ pydantic==2.13.4
 # in-network NPI set as a compact, mmap'd, O(1)-membership bitmap. Prebuilt wheels
 # (CRoaring) on Linux/macOS/Windows, so it installs cardless on Vercel's Python runtime.
 pyroaring==1.1.0
+# Streaming JSON parser for the TiC harvester (app/harvest_tic.py): event-parses
+# hundreds-of-GB in-network files without landing them in memory. Prebuilt wheels with a
+# C (yajl2) backend; a pure-Python fallback keeps it portable.
+ijson==3.5.1
