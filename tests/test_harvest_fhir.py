@@ -1,0 +1,156 @@
+"""The FHIR bulk harvester (Rail 1). Same trust bar as the live path: an NPI is admitted
+only for an active PractitionerRole with a resolvable network link (presence/inactive/
+no-link never counts), every NPI passes the Luhn gate, and pagination + resumption work
+without ever shipping a silently-short "verified" set."""
+import httpx
+import pytest
+import respx
+
+from app import harvest_fhir, membership
+from app.config import settings
+from app.harvest_fhir import HarvestStats, harvest_endpoint, harvest_page
+from app.insurance import MembershipSource
+
+# Valid NPIs (pass Luhn). NPI_A/B are in-network; NPI_C is a Luhn-INVALID impostor.
+NPI_A, NPI_B = "1003000126", "1003000134"
+NPI_BAD = "1234567890"
+
+
+def _practitioner(pid, npi):
+    return {"fullUrl": f"http://x/Practitioner/{pid}",
+            "resource": {"resourceType": "Practitioner", "id": pid,
+                         "identifier": [{"system": "http://hl7.org/fhir/sid/us-npi", "value": npi}]}}
+
+
+def _role(pid, *, active=True, network=True):
+    res = {"resourceType": "PractitionerRole", "active": active,
+           "practitioner": {"reference": f"Practitioner/{pid}"}}
+    if network:
+        res["extension"] = [{
+            "url": "http://hl7.org/fhir/us/davinci-pdex-plan-net/StructureDefinition/network-reference",
+            "valueReference": {"reference": "Organization/net1"}}]
+    return {"resource": res}
+
+
+def _bundle(entries, next_url=None):
+    b = {"resourceType": "Bundle", "entry": entries}
+    if next_url:
+        b["link"] = [{"relation": "next", "url": next_url}]
+    return b
+
+
+# ── the per-role trust judgement, applied in bulk ─────────────────────────────
+def test_harvest_page_admits_only_active_network_linked():
+    entries = [
+        _practitioner("a", NPI_A), _role("a"),                          # admit
+        _practitioner("b", NPI_B), _role("b", active=False),            # inactive -> skip
+        _practitioner("c", NPI_A), _role("c", network=False),           # no network link -> skip
+    ]
+    out, stats = set(), HarvestStats()
+    harvest_page(_bundle(entries), out, stats)
+    assert out == {NPI_A}
+    assert stats.roles_seen == 3 and stats.roles_in_network == 1
+
+
+def test_harvest_page_luhn_gate_rejects_impostor_npi():
+    entries = [_practitioner("a", NPI_BAD), _role("a")]  # active + network but bad NPI
+    out, stats = set(), HarvestStats()
+    harvest_page(_bundle(entries), out, stats)
+    assert out == set()
+    # It counted as in-network but the practitioner index dropped the bad NPI, so the role
+    # resolves to no practitioner (unresolved) rather than admitting a fabricated NPI.
+    assert stats.roles_in_network == 1 and stats.npis_admitted == 0
+
+
+def test_harvest_page_counts_unresolved_practitioner():
+    entries = [_role("missing")]  # in-network role whose Practitioner isn't on the page
+    out, stats = set(), HarvestStats()
+    harvest_page(_bundle(entries), out, stats)
+    assert out == set() and stats.practitioner_unresolved == 1
+
+
+# ── pagination, bounds, resumption ────────────────────────────────────────────
+@respx.mock
+def test_harvest_follows_next_link_across_pages():
+    base = "https://payer.example/r4"
+    page2 = f"{base}/PractitionerRole?page=2"
+    respx.get(f"{base}/PractitionerRole", params={"page": "2"}).mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("b", NPI_B), _role("b")])))
+    respx.get(f"{base}/PractitionerRole").mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("a", NPI_A), _role("a")],
+                                                      next_url=page2)))
+    out, stats = harvest_endpoint({"id": "p", "base_url": base}, page_size=2)
+    assert out == {NPI_A, NPI_B}
+    assert stats.pages == 2 and stats.next_cursor is None
+
+
+@respx.mock
+def test_max_pages_bounds_and_records_cursor():
+    base = "https://payer.example/r4"
+    page2 = f"{base}/PractitionerRole?page=2"
+    respx.get(f"{base}/PractitionerRole").mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("a", NPI_A), _role("a")],
+                                                      next_url=page2)))
+    out, stats = harvest_endpoint({"id": "p", "base_url": base}, page_size=2, max_pages=1)
+    assert out == {NPI_A}
+    assert stats.pages == 1 and stats.next_cursor == page2   # resumable
+
+
+@respx.mock
+def test_operationoutcome_page_stops_loudly():
+    """A FHIR server wraps errors (too-large _count, rejected facet) in a 200 searchset
+    Bundle. That must stop the harvest with an error + cursor, not look like an empty
+    directory and ship an empty verified set."""
+    base = "https://payer.example/r4"
+    oo = {"resourceType": "Bundle", "entry": [{"resource": {
+        "resourceType": "OperationOutcome",
+        "issue": [{"severity": "error", "code": "processing", "diagnostics": "Error code CRD16-005"}]}}]}
+    respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(200, json=oo))
+    out, stats = harvest_endpoint({"id": "p", "base_url": base})
+    assert out == set() and stats.error and "CRD16-005" in stats.error
+
+
+@respx.mock
+def test_non_bundle_browse_stops_without_crashing():
+    base = "https://payer.example/r4"
+    respx.get(f"{base}/PractitionerRole").mock(
+        return_value=httpx.Response(200, json={"resourceType": "OperationOutcome"}))
+    out, stats = harvest_endpoint({"id": "p", "base_url": base})
+    assert out == set() and stats.error and "Bundle" in stats.error
+
+
+# ── end-to-end: harvest -> bitmap -> MembershipSource serves it verified ───────
+@respx.mock
+@pytest.mark.asyncio
+async def test_harvest_to_bitmap_is_served_verified(tmp_path, monkeypatch):
+    base = "https://payer.example/r4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [
+        {"id": "cigna", "label": "Cigna", "category": "commercial", "base_url": base,
+         "verify_url": "https://cigna.example/find"}])
+    respx.get(f"{base}/PractitionerRole").mock(
+        return_value=httpx.Response(200, json=_bundle(
+            [_practitioner("a", NPI_A), _role("a"), _practitioner("b", NPI_B), _role("b")])))
+
+    entry, stats = harvest_fhir.harvest_to_bitmap("cigna", tmp_path)
+    assert entry is not None and entry.method == "fhir-plannet" and entry.level == "payer"
+    assert entry.count == 2 and entry.source_url == "https://cigna.example/find"
+
+    store = membership.MembershipStore(tmp_path)
+    store.load()
+    src = MembershipSource(store.entry("cigna"), store)
+    assert src.confidence == "verified" and src.requires_network is False
+    out = await src.check_many([NPI_A, NPI_B, "1992999874"])
+    assert out[NPI_A] is True and out[NPI_B] is True
+    assert out["1992999874"] is False        # not harvested -> genuine no
+    store.close()
+
+
+@respx.mock
+def test_empty_harvest_writes_nothing(tmp_path, monkeypatch):
+    base = "https://payer.example/r4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [
+        {"id": "cigna", "label": "Cigna", "base_url": base}])
+    respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(200, json=_bundle([])))
+    entry, stats = harvest_fhir.harvest_to_bitmap("cigna", tmp_path)
+    assert entry is None                      # a failed/empty harvest never ships an empty set
+    assert not (tmp_path / "cigna.roaring").exists()
