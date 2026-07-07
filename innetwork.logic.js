@@ -272,7 +272,14 @@ function coverageStatus(info, filterable) {
   const v = info.value,
     level = info.level || 'payer';
   if (info.confidence === 'verified') {
-    if (v === true) return level === 'plan' ? { cls: 'yes', text: 'Confirmed' } : { cls: 'innet', text: 'In-network' };
+    if (v === true) {
+      const base = level === 'plan' ? { cls: 'yes', text: 'Confirmed' } : { cls: 'innet', text: 'In-network' };
+      // Staleness demotion (correction #4): a harvested set past its freshness SLO stays
+      // a real verified "yes" (the data IS there), but is flagged so the UI shows it
+      // dated/muted instead of a fresh green — never a silent stale green, never a "no".
+      if (info.stale) return { cls: base.cls + ' stale', text: base.text, stale: true };
+      return base;
+    }
     if (v === false) return level === 'plan' ? { cls: 'no', text: 'Not enrolled' } : { cls: 'no', text: 'Not listed' };
     return { cls: 'unknown', text: 'Unverified' };
   }

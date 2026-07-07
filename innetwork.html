@@ -270,6 +270,10 @@
   .conf-dot.estimated { background:var(--honey); }
   .ins-badge.likely { color:var(--honey-d); background:var(--honey-l); }
   .ins-badge.innet { color:var(--info-fg); background:var(--info-bg); border-color:var(--info-border); }
+  /* Staleness demotion (correction #4): a verified answer past its freshness SLO is a real
+     "yes" but muted + dated with a dashed border — never rendered as a fresh green. */
+  .ins-badge.stale { color:var(--muted); background:var(--surface); border-color:var(--border-2); border-style:dashed; font-weight:600; }
+  .cov-status.stale { color:var(--muted); font-weight:600; }
 
   .data-note { margin:13px 0 0; padding:11px 13px; max-width:640px; background:linear-gradient(180deg,var(--paper-warm),var(--paper-2)); border:1px solid var(--border);
     border-radius:var(--r-sm); font-size:.69rem; line-height:1.55; color:var(--muted); display:flex; gap:8px; align-items:flex-start; box-shadow:var(--shadow-xs); }

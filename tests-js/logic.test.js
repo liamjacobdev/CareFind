@@ -90,6 +90,14 @@ describe('coverageStatus — payer vs plan level (A2)', () => {
     // A filterable (regional) estimate keeps the "likely · confirm" wording.
     expect(coverageStatus({ value: true, confidence: 'estimated' }, true).text).toBe('Likely · confirm');
   });
+  it('demotes a stale verified hit to a dated/muted badge, never a fresh green (correction #4)', () => {
+    const plan = coverageStatus({ value: true, confidence: 'verified', level: 'plan', stale: true });
+    expect(plan).toEqual({ cls: 'yes stale', text: 'Confirmed', stale: true });
+    const payer = coverageStatus({ value: true, confidence: 'verified', level: 'payer', stale: true });
+    expect(payer).toEqual({ cls: 'innet stale', text: 'In-network', stale: true });
+    // Fresh (no stale flag) stays the plain green/blue badge — no demotion.
+    expect(coverageStatus({ value: true, confidence: 'verified', level: 'plan' }).stale).toBeUndefined();
+  });
   it('returns null when there is nothing to show', () => {
     expect(coverageStatus(null)).toBeNull();
     expect(coverageStatus(undefined)).toBeNull();

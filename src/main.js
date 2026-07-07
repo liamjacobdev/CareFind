@@ -1028,10 +1028,14 @@ function insuranceBadgesHtml(doc) {
     const info = ins[id];
     if (!info || info.value !== true) continue;
     if (info.confidence === 'verified') {
+      // Staleness demotion: a verified hit past its freshness SLO stays a real "yes" but
+      // is muted and dated ("· as of <date>"), never shown as a fresh green.
+      const dated = info.stale && info.fetched_at ? ` · as of ${esc(fmtDate(info.fetched_at))}` : '';
+      const staleCls = info.stale ? ' stale' : '';
       if ((info.level || 'payer') === 'plan') {
-        out.push(`<span class="ins-badge">${chk}${esc(planLabel(id))}</span>`); // green "Confirmed" — a specific program
+        out.push(`<span class="ins-badge${staleCls}">${chk}${esc(planLabel(id))}${dated}</span>`); // green "Confirmed" — a specific program
       } else {
-        out.push(`<span class="ins-badge innet">${esc(planLabel(id))} · in-network</span>`); // payer network listing, not plan acceptance
+        out.push(`<span class="ins-badge innet${staleCls}">${esc(planLabel(id))} · in-network${dated}</span>`); // payer network listing, not plan acceptance
       }
     } else if (state.insMode === 'any' && state.selectedPlans.includes(id)) {
       const pm = planMeta(id);
