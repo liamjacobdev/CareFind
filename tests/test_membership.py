@@ -209,3 +209,22 @@ async def test_membership_medicare_supersedes_legacy_and_is_on_by_default(tmp_pa
         settings.membership_dir, settings.use_membership = old_dir, old_use
         if reg.membership_store:
             reg.membership_store.close()
+
+
+def test_unreadable_manifest_starts_fresh(tmp_path):
+    (tmp_path / "manifest.json").write_text("{ not valid json", encoding="utf-8")
+    s = membership.MembershipStore(tmp_path)
+    assert s.load() == 0          # no payers, no crash
+
+
+def test_malformed_manifest_entry_is_skipped(tmp_path):
+    import json
+    _write(tmp_path, PRESENT, id="good")
+    p = tmp_path / "manifest.json"
+    data = json.loads(p.read_text(encoding="utf-8"))
+    data["payers"]["bad"] = {"id": "bad"}   # missing required fields -> skipped, not fatal
+    p.write_text(json.dumps(data), encoding="utf-8")
+    s = membership.MembershipStore(tmp_path)
+    s.load()
+    assert s.loaded("good") and not s.loaded("bad")
+    s.close()

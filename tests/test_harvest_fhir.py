@@ -248,3 +248,23 @@ def test_cli_shard_facet_and_incomplete_not_written(tmp_path, monkeypatch, capsy
     harvest_fhir.main(["harvest_fhir", "cigna", "--max-pages", "1", "--shard", "state=CA"])
     out = capsys.readouterr().out
     assert "incomplete" in out and not (tmp_path / "cigna.roaring").exists()
+
+
+@respx.mock
+def test_max_npis_bound_records_cursor():
+    base = "https://payer.example/r4"
+    page2 = f"{base}/PractitionerRole?page=2"
+    respx.get(f"{base}/PractitionerRole").mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("a", NPI_A), _role("a")], next_url=page2)))
+    out, stats = harvest_endpoint({"id": "p", "base_url": base}, max_npis=1)
+    assert out == {NPI_A} and stats.next_cursor == page2   # stopped at the NPI budget
+
+
+@respx.mock
+def test_start_url_resumes_from_cursor():
+    base = "https://payer.example/r4"
+    resume = f"{base}/PractitionerRole?page=5"
+    respx.get(f"{base}/PractitionerRole", params={"page": "5"}).mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("b", NPI_B), _role("b")])))
+    out, stats = harvest_endpoint({"id": "p", "base_url": base}, start_url=resume)
+    assert out == {NPI_B} and stats.pages == 1   # resumed from the cursor, no first-page refetch
