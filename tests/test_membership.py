@@ -6,7 +6,6 @@ payer is flagged, never silently served as a fresh green."""
 import time
 
 import pytest
-from pyroaring import BitMap
 
 from app import membership
 from app.config import settings

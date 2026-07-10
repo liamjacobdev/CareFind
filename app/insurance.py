@@ -55,9 +55,9 @@ class Registry:
                 log.warning("Membership store failed to load from %s: %s: %s",
                             settings.membership_dir, type(e).__name__, e)
             else:
-                for entry in store.payers():
-                    sources.append(MembershipSource(entry, store))
-                    membership_ids.add(entry.id)
+                for m_entry in store.payers():
+                    sources.append(MembershipSource(m_entry, store))
+                    membership_ids.add(m_entry.id)
                 self.membership_store = store
 
         # 2) Medicare — legacy sqlite index, only if not already served by a bitmap.

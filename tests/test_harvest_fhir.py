@@ -154,3 +154,97 @@ def test_empty_harvest_writes_nothing(tmp_path, monkeypatch):
     entry, stats = harvest_fhir.harvest_to_bitmap("cigna", tmp_path)
     assert entry is None                      # a failed/empty harvest never ships an empty set
     assert not (tmp_path / "cigna.roaring").exists()
+
+
+@respx.mock
+def test_partial_harvest_is_not_written_as_complete(tmp_path, monkeypatch):
+    """The trust guard: a harvest that stopped early (max_pages/timeout/error → a resume
+    cursor is left) collected a PARTIAL set. Serving it as complete would make in-network
+    providers beyond the harvested pages read as False. So it must NOT be written."""
+    base = "https://payer.example/r4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [
+        {"id": "cigna", "label": "Cigna", "base_url": base}])
+    page2 = f"{base}/PractitionerRole?page=2"
+    respx.get(f"{base}/PractitionerRole").mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("a", NPI_A), _role("a")],
+                                                      next_url=page2)))
+    # Bounded to 1 page while more remain -> next_cursor set -> incomplete.
+    entry, stats = harvest_fhir.harvest_to_bitmap("cigna", tmp_path, max_pages=1)
+    assert stats.npis_admitted == 1 and stats.next_cursor == page2
+    assert entry is None and not (tmp_path / "cigna.roaring").exists()
+    # A caller that explicitly opts out of the completeness guard may still write.
+    entry2, _ = harvest_fhir.harvest_to_bitmap("cigna", tmp_path, max_pages=1, complete_only=False)
+    assert entry2 is not None and (tmp_path / "cigna.roaring").exists()
+
+
+# ── helpers + CLI coverage ────────────────────────────────────────────────────
+def test_headers_includes_api_key_and_no_oauth():
+    with httpx.Client() as c:
+        h = harvest_fhir._headers({"api_key_header": "X-Key", "api_key": "secret"}, c)
+    assert h["X-Key"] == "secret" and "Authorization" not in h
+
+
+def test_resolve_cfg_prefers_payers_json_then_registry(monkeypatch):
+    monkeypatch.setattr(settings, "load_payers", lambda: [{"id": "cigna", "base_url": "u"}])
+    assert harvest_fhir._resolve_cfg("cigna")["base_url"] == "u"
+    monkeypatch.setattr(settings, "load_payers", lambda: [])
+    assert harvest_fhir._resolve_cfg("cigna")["id"] == "cigna"   # from planet_registry
+    with pytest.raises(SystemExit):
+        harvest_fhir._resolve_cfg("nope_payer")
+
+
+@respx.mock
+def test_get_with_backoff_retries_transient_then_succeeds(monkeypatch):
+    monkeypatch.setattr(harvest_fhir.time, "sleep", lambda _s: None)  # no real backoff wait
+    base = "https://payer.example/r4"
+    respx.get(f"{base}/PractitionerRole").mock(side_effect=[
+        httpx.Response(503),
+        httpx.Response(200, json=_bundle([_practitioner("a", NPI_A), _role("a")])),
+    ])
+    out, stats = harvest_endpoint({"id": "p", "base_url": base})
+    assert out == {NPI_A} and stats.retries >= 1
+
+
+@respx.mock
+def test_get_with_backoff_gives_up_and_records_cursor(monkeypatch):
+    monkeypatch.setattr(harvest_fhir.time, "sleep", lambda _s: None)
+    base = "https://payer.example/r4"
+    respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(503))
+    out, stats = harvest_endpoint({"id": "p", "base_url": base})
+    assert out == set() and stats.error and stats.next_cursor is not None
+
+
+@respx.mock
+def test_cli_dry_run_reports_without_writing(tmp_path, monkeypatch, capsys):
+    base = "https://payer.example/r4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [{"id": "cigna", "label": "Cigna", "base_url": base}])
+    monkeypatch.setattr(settings, "membership_dir", str(tmp_path))
+    respx.get(f"{base}/PractitionerRole").mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("a", NPI_A), _role("a")])))
+    harvest_fhir.main(["harvest_fhir", "cigna", "--dry-run", "--page-size", "50"])
+    assert "cigna" in capsys.readouterr().out
+    assert not (tmp_path / "cigna.roaring").exists()
+
+
+@respx.mock
+def test_cli_complete_harvest_writes(tmp_path, monkeypatch, capsys):
+    base = "https://payer.example/r4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [{"id": "cigna", "label": "Cigna", "base_url": base}])
+    monkeypatch.setattr(settings, "membership_dir", str(tmp_path))
+    respx.get(f"{base}/PractitionerRole").mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("a", NPI_A), _role("a")])))
+    harvest_fhir.main(["harvest_fhir", "cigna"])
+    assert (tmp_path / "cigna.roaring").exists() and "wrote" in capsys.readouterr().out
+
+
+@respx.mock
+def test_cli_shard_facet_and_incomplete_not_written(tmp_path, monkeypatch, capsys):
+    base = "https://payer.example/r4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [{"id": "cigna", "label": "Cigna", "base_url": base}])
+    monkeypatch.setattr(settings, "membership_dir", str(tmp_path))
+    page2 = f"{base}/PractitionerRole?page=2"
+    respx.get(f"{base}/PractitionerRole").mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("a", NPI_A), _role("a")], next_url=page2)))
+    harvest_fhir.main(["harvest_fhir", "cigna", "--max-pages", "1", "--shard", "state=CA"])
+    out = capsys.readouterr().out
+    assert "incomplete" in out and not (tmp_path / "cigna.roaring").exists()

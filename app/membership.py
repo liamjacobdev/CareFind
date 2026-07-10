@@ -32,9 +32,10 @@ import mmap
 import os
 import tempfile
 import time
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from pyroaring import BitMap, FrozenBitMap
 
@@ -255,8 +256,8 @@ class MembershipStore:
         return _Loaded(entry=entry, bitmap=bitmap, _mm=mm)
 
     def close(self) -> None:
-        for l in self._loaded.values():
-            mm = l._mm
+        for ld in self._loaded.values():
+            mm = ld._mm
             if mm is not None:
                 try:
                     mm.close()
@@ -266,36 +267,36 @@ class MembershipStore:
 
     # -- introspection --
     def payers(self) -> list[ManifestEntry]:
-        return [l.entry for l in self._loaded.values()]
+        return [ld.entry for ld in self._loaded.values()]
 
     def entry(self, payer_id: str) -> ManifestEntry | None:
-        l = self._loaded.get(payer_id)
-        return l.entry if l else None
+        ld = self._loaded.get(payer_id)
+        return ld.entry if ld else None
 
     def loaded(self, payer_id: str) -> bool:
         return payer_id in self._loaded
 
     def count(self, payer_id: str) -> int:
-        l = self._loaded.get(payer_id)
-        return len(l.bitmap) if l else 0
+        ld = self._loaded.get(payer_id)
+        return len(ld.bitmap) if ld else 0
 
     # -- membership --
     def has(self, payer_id: str, npi: str) -> bool:
         """True iff `npi` is in `payer_id`'s in-network set. A payer that isn't loaded, or
         a non-NPI query value, returns False (the source layer maps not-loaded to
         "unknown"; a malformed NPI genuinely isn't in any validated set)."""
-        l = self._loaded.get(payer_id)
-        if l is None:
+        ld = self._loaded.get(payer_id)
+        if ld is None:
             return False
         v = encode(npi)
-        return v is not None and v in l.bitmap
+        return v is not None and v in ld.bitmap
 
     def has_many(self, payer_id: str, npis: Iterable[str]) -> set[str]:
         """The subset of `npis` present in `payer_id`'s set (empty if not loaded)."""
-        l = self._loaded.get(payer_id)
-        if l is None:
+        ld = self._loaded.get(payer_id)
+        if ld is None:
             return set()
-        bm = l.bitmap
+        bm = ld.bitmap
         out: set[str] = set()
         for n in npis:
             v = encode(n)

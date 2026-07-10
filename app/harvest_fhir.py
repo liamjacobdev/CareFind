@@ -27,7 +27,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -133,7 +133,7 @@ def _headers(cfg: dict[str, Any], client: httpx.Client) -> dict[str, str]:
 def _next_url(bundle: dict[str, Any]) -> str | None:
     for link in bundle.get("link", []) or []:
         if link.get("relation") == "next" and link.get("url"):
-            return link["url"]
+            return str(link["url"])
     return None
 
 
@@ -257,13 +257,23 @@ def _resolve_cfg(payer_id: str) -> dict[str, Any]:
                      f"{[e.id for e in planet_registry.validated()]}")
 
 
-def harvest_to_bitmap(payer_id: str, root: Path, **kw: Any) -> tuple[membership.ManifestEntry | None, HarvestStats]:
+def harvest_to_bitmap(payer_id: str, root: Path, *, complete_only: bool = True,
+                      **kw: Any) -> tuple[membership.ManifestEntry | None, HarvestStats]:
     """Harvest `payer_id` and write its membership bitmap + manifest entry (method
-    "fhir-plannet"). Returns (entry, stats); entry is None if the harvest collected nothing
-    (a failed/empty harvest must not overwrite a good bitmap with an empty one)."""
+    "fhir-plannet"). Returns (entry, stats); entry is None (nothing written) when:
+
+      • the harvest collected nothing (don't overwrite a good bitmap with an empty one); or
+      • `complete_only` and the harvest did NOT exhaust the directory (a `next_cursor` was
+        left, or it errored). This is the trust guard: a PARTIAL set served as if complete
+        would make in-network providers beyond the harvested pages read as False — a
+        fabricated "no". A partial/sampling run (`--max-pages`, a timeout, an upstream
+        error) therefore keeps the last-good bitmap and lets staleness surface instead.
+    """
     cfg = _resolve_cfg(payer_id)
     npis, stats = harvest_endpoint(cfg, **kw)
     if not npis:
+        return None, stats
+    if complete_only and (stats.next_cursor is not None or stats.error is not None):
         return None, stats
     bitmap, admitted, rejected = membership.build_bitmap(npis)
     entry = membership.write_payer(
@@ -318,7 +328,9 @@ def main(argv: list[str]) -> None:
         print(f"[{args.payer}] wrote {root / entry.file} ({entry.count:,} NPIs, "
               f"{entry.sha256[:12]}…).", flush=True)
     elif not args.dry_run:
-        print(f"[{args.payer}] harvest collected 0 NPIs — bitmap NOT written (kept last good).",
+        why = ("incomplete harvest (a resume cursor or error was left — a partial set is "
+               "never served as complete)" if stats.npis_admitted else "collected 0 NPIs")
+        print(f"[{args.payer}] {why} — bitmap NOT written (kept last good; staleness surfaces).",
               flush=True)
 
 

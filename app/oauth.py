@@ -31,7 +31,7 @@ class ClientCredentials:
     _exp: float = 0.0
 
     @classmethod
-    def from_config(cls, cfg: dict[str, Any]) -> "ClientCredentials | None":
+    def from_config(cls, cfg: dict[str, Any]) -> ClientCredentials | None:
         """Build from a payer config, or None if it isn't OAuth-configured. Secrets come
         from inline values or, preferably, the env vars named by *_env."""
         if cfg.get("auth") not in ("oauth2", "oauth2_client_credentials"):
@@ -56,9 +56,10 @@ class ClientCredentials:
         return headers, data
 
     def _store(self, payload: dict[str, Any]) -> str | None:
-        tok = payload.get("access_token")
-        if not tok:
+        raw = payload.get("access_token")
+        if not raw:
             return None
+        tok = str(raw)
         # Refresh 60s early; default to a conservative 5 min if expires_in is absent.
         try:
             ttl = int(payload.get("expires_in", 300))

@@ -131,3 +131,58 @@ def test_empty_harvest_writes_nothing(tmp_path):
     out_dir = tmp_path / "payers"
     entry, stats = harvest_tic.harvest_to_bitmap("aetna", src, out_dir)
     assert entry is None and not (out_dir / "aetna.roaring").exists()
+
+
+# ── helpers + CLI + URL streaming coverage ────────────────────────────────────
+def test_resolve_ref_absolute_relative_and_url():
+    import os
+    # absolute path passes through
+    assert harvest_tic._resolve_ref("/tmp/in.json", os.path.abspath("/x/ref.json")) == os.path.abspath("/x/ref.json")
+    # URL ref passes through; a relative ref resolves against a parent URL
+    assert harvest_tic._resolve_ref("https://p/in.json", "https://q/ref.json") == "https://q/ref.json"
+    assert harvest_tic._resolve_ref("https://p/dir/in.json", "ref.json") == "https://p/dir/ref.json"
+    # relative ref against a local parent path
+    got = harvest_tic._resolve_ref(str(pytest.__file__), "ref.json")
+    assert got.endswith("ref.json")
+
+
+def test_non_catalog_payer_warns_but_harvests(tmp_path, capsys):
+    src = _write(tmp_path, "in.json", {"in_network": [
+        {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_A)]}]}]}]})
+    entry, _ = harvest_tic.harvest_to_bitmap("not_a_catalog_id", src, tmp_path / "p")
+    assert entry is not None
+    assert "not in app/catalog.py" in capsys.readouterr().out
+
+
+def test_cli_harvests_and_reports(tmp_path, monkeypatch, capsys):
+    from app.config import settings
+    src = _write(tmp_path, "in.json", {"in_network": [
+        {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_A), int(NPI_B)]}]}]}]})
+    monkeypatch.setattr(settings, "membership_dir", str(tmp_path / "payers"))
+    harvest_tic.main(["harvest_tic", "aetna", src])
+    out = capsys.readouterr().out
+    assert "wrote" in out and (tmp_path / "payers" / "aetna.roaring").exists()
+
+
+def test_cli_usage_when_missing_args():
+    with pytest.raises(SystemExit):
+        harvest_tic.main(["harvest_tic", "aetna"])   # missing src
+
+
+def test_cli_empty_harvest_reports_not_written(tmp_path, monkeypatch, capsys):
+    from app.config import settings
+    src = _write(tmp_path, "in.json", {"in_network": []})
+    monkeypatch.setattr(settings, "membership_dir", str(tmp_path / "payers"))
+    harvest_tic.main(["harvest_tic", "aetna", src])
+    assert "NOT written" in capsys.readouterr().out
+
+
+def test_open_binary_streams_a_url(tmp_path, monkeypatch):
+    # The URL path goes through download.stream_to_spool; stub it to return a local spool.
+    import io
+    from app import harvest_tic as ht
+    payload = json.dumps({"in_network": [
+        {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_A)]}]}]}]}).encode()
+    monkeypatch.setattr("app.download.stream_to_spool", lambda src: io.BytesIO(payload))
+    got, stats = _harvest("https://payer.example/in-network.json")
+    assert got == {NPI_A} and stats.files == 1

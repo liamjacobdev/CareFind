@@ -32,9 +32,10 @@ import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import IO, Any, cast
 
 import ijson
+from pyroaring import BitMap
 
 from . import membership, tic_index
 from .catalog import PAYER_CATALOG
@@ -54,14 +55,14 @@ class TicStats:
     error: str | None = None
 
 
-def _open_binary(src: str) -> tuple[BinaryIO, list[Any]]:
+def _open_binary(src: str) -> tuple[IO[bytes], list[Any]]:
     """Open `src` (URL or path) as a seekable binary stream, transparently gunzipping.
     Returns (stream, closers). A URL streams to a disk-backed spool (bounded by
     settings.ingest_max_bytes) so even a huge file never lands in RAM."""
     closers: list[Any] = []
     if src.startswith(("http://", "https://")):
         from .download import stream_to_spool
-        raw: BinaryIO = stream_to_spool(src)  # rewound, seekable, disk-backed
+        raw: IO[bytes] = stream_to_spool(src)  # rewound, seekable, disk-backed
     else:
         raw = open(src, "rb")
     closers.append(raw)
@@ -70,11 +71,13 @@ def _open_binary(src: str) -> tuple[BinaryIO, list[Any]]:
     if head == b"\x1f\x8b" or src.endswith(".gz"):
         gz = gzip.GzipFile(fileobj=raw)
         closers.insert(0, gz)
-        return gz, closers
+        # GzipFile is a binary stream but typeshed doesn't type it as IO[bytes]; the cast
+        # reflects the real contract (ijson reads it like any binary file object).
+        return cast("IO[bytes]", gz), closers
     return raw, closers
 
 
-def _top_level_keys(stream: BinaryIO, limit: int = 8) -> list[str]:
+def _top_level_keys(stream: IO[bytes], limit: int = 8) -> list[str]:
     """The first few top-level object keys, to classify a file (ToC vs in-network) without
     reading it whole. Rewinds the stream afterward (callers pass a seekable stream)."""
     keys: list[str] = []
@@ -87,7 +90,7 @@ def _top_level_keys(stream: BinaryIO, limit: int = 8) -> list[str]:
     return keys
 
 
-def _stream_npis(stream: BinaryIO, external_refs: list[str]) -> Iterator[str]:
+def _stream_npis(stream: IO[bytes], external_refs: list[str]) -> Iterator[str]:
     """Single streaming pass: yield every NPI token (from inlined provider_groups anywhere
     in the doc) and record every external `provider_references[].location` for follow-up.
 
@@ -109,7 +112,7 @@ class TicHarvester:
     millions of NPIs), following TiC indexes and external provider references."""
 
     def __init__(self) -> None:
-        self.bitmap = membership.BitMap()
+        self.bitmap = BitMap()
         self.stats = TicStats()
         self._visited: set[str] = set()
 
