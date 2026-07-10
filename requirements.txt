@@ -1,6 +1,6 @@
 # Pinned to known-good versions for reproducible image builds. Bump deliberately,
 # then run the test suite (requirements-dev.txt) before committing the change.
-fastapi==0.137.0
+fastapi==0.139.0
 uvicorn[standard]==0.49.0
 httpx==0.28.1
 pydantic==2.13.4
