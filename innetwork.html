@@ -370,7 +370,11 @@
   /* ── Map ── */
   #map-container { flex:1 1 50%; min-width:0; position:relative; z-index:0; min-height:360px; background:var(--paper-2); }
   #map { width:100%; height:100%; min-height:360px; }
-  #map-info-pill { position:absolute; bottom:22px; left:50%; transform:translateX(-50%) translateY(8px); z-index:500; background:rgba(12,31,26,.92); color:#eafff6; padding:7px 16px; border-radius:999px; font-size:.76rem; font-weight:500; opacity:0; pointer-events:none; transition:opacity .25s,transform .25s; box-shadow:var(--shadow-md); }
+  /* Opaque fill (not rgba <1): the pill floats over the Leaflet map canvas, so a
+     translucent background makes axe blend its text against the map tiles (~2.95:1 on
+     WebKit — fails WCAG AA). A solid dark fill holds the contrast at ~17:1 regardless of
+     what's behind it. */
+  #map-info-pill { position:absolute; bottom:22px; left:50%; transform:translateX(-50%) translateY(8px); z-index:500; background:#0c1f1a; color:#eafff6; padding:7px 16px; border-radius:999px; font-size:.76rem; font-weight:500; opacity:0; pointer-events:none; transition:opacity .25s,transform .25s; box-shadow:var(--shadow-md); }
   #map-info-pill.visible { opacity:1; transform:translateX(-50%) translateY(0); }
   .marker-pin { width:26px; height:26px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); border:2.5px solid #fff; box-shadow:0 3px 8px rgba(12,31,26,.4),inset 0 2px 3px rgba(255,255,255,.35),inset 0 -2px 4px rgba(0,0,0,.18); display:flex; align-items:center; justify-content:center; }
   .marker-pin.active { width:34px; height:34px; box-shadow:0 6px 18px rgba(12,31,26,.55),inset 0 2px 4px rgba(255,255,255,.4),inset 0 -2px 5px rgba(0,0,0,.2),0 0 0 5px rgba(15,122,95,.18); z-index:1000; }
