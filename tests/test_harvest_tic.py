@@ -180,7 +180,7 @@ def test_cli_empty_harvest_reports_not_written(tmp_path, monkeypatch, capsys):
 def test_open_binary_streams_a_url(tmp_path, monkeypatch):
     # The URL path goes through download.stream_to_spool; stub it to return a local spool.
     import io
-    from app import harvest_tic as ht
+
     payload = json.dumps({"in_network": [
         {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_A)]}]}]}]}).encode()
     monkeypatch.setattr("app.download.stream_to_spool", lambda src: io.BytesIO(payload))
