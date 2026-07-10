@@ -56,7 +56,10 @@ jobs:
           PAYERS_INPUT: ${{ github.event.inputs.payers }}
         run: |
           set -u
-          PAYERS="${PAYERS_INPUT:-cigna excellus priority_partners}"
+          # Default set = payers whose Plan-Net directory allows an unfiltered browse (what
+          # the Rail-1 harvester walks). Excellus is intentionally excluded: it rejects the
+          # unfiltered browse (HTTP 400) and needs the TiC rail or a faceted harvest instead.
+          PAYERS="${PAYERS_INPUT:-cigna priority_partners}"
           echo "Harvesting: $PAYERS"
           for p in $PAYERS; do
             echo "::group::harvest $p"
