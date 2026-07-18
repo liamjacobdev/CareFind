@@ -27,10 +27,11 @@ mode) can't fabricate a "yes". A table-of-contents root is auto-discovered and f
 """
 from __future__ import annotations
 
+import argparse
 import gzip
 import sys
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any, cast
 
@@ -52,7 +53,16 @@ class TicStats:
     npi_values_seen: int = 0       # every npi token encountered (incl. dupes)
     rejected: int = 0              # failed the Luhn gate
     unique_npis: int = 0           # final bitmap cardinality
-    error: str | None = None
+    failed_files: int = 0          # ToC children / external refs that couldn't be read
+    failures: list[str] = field(default_factory=list)  # "<src>: <why>" per hole (+ probe cap)
+    error: str | None = None       # a fatal error that aborted the whole harvest
+
+    @property
+    def complete(self) -> bool:
+        """A harvest is complete only if nothing errored, no file failed, and no probe cap
+        was hit — the write gate mirrors Rail 1: any hole means a partial fan-out that must
+        NOT be served as complete (a missing in-network file would read as a fabricated no)."""
+        return self.error is None and not self.failures
 
 
 def _open_binary(src: str) -> tuple[IO[bytes], list[Any]]:
@@ -111,10 +121,12 @@ class TicHarvester:
     """Accumulates in-network NPIs directly into a Roaring bitmap (bounded memory even for
     millions of NPIs), following TiC indexes and external provider references."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_files: int | None = None) -> None:
         self.bitmap = BitMap()
         self.stats = TicStats()
         self._visited: set[str] = set()
+        self.max_files = max_files       # recon cap on in-network files streamed (probe run)
+        self._capped = False
 
     def _admit(self, npi: str) -> None:
         self.stats.npi_values_seen += 1
@@ -126,33 +138,48 @@ class TicHarvester:
 
     def harvest(self, src: str) -> None:
         """Harvest `src`, which may be a TiC table-of-contents (fanned out), an in-network
-        file, or an external provider-reference file. Cycle-guarded via `_visited`."""
-        if src in self._visited:
+        file, or an external provider-reference file. Cycle-guarded via `_visited`.
+
+        Resilient by design: a child/external file that fails to open or stream is recorded
+        as a HOLE (`stats.failures`) and does NOT abort its siblings — so one run surfaces
+        the whole failure picture, and the completeness guard then refuses to ship the
+        partial set (a missing in-network file would make its providers read as "no")."""
+        if src in self._visited or self._capped:
             return
         self._visited.add(src)
-        stream, closers = _open_binary(src)
+        child_srcs: list[str] = []
+        external_after: list[str] = []
         try:
-            keys = _top_level_keys(stream)
-            if "reporting_structure" in keys:
-                # A table-of-contents. It's the small index file (not an in-network file),
-                # so reading it whole to discover the in-network URLs is fine; fan out.
-                refs = tic_index.parse_index(stream.read())
-                child_srcs = [r.location for r in refs]
-                external_after: list[str] = []
-            else:
-                # An in-network file (or external ref file): stream its NPIs, collecting
-                # any external provider_references to follow afterward.
-                self.stats.files += 1
-                external_after = []
-                for npi in _stream_npis(stream, external_after):
-                    self._admit(npi)
-                child_srcs = []
-        finally:
-            for c in closers:
-                try:
-                    c.close()
-                except Exception:
-                    pass
+            stream, closers = _open_binary(src)
+            try:
+                keys = _top_level_keys(stream)
+                if "reporting_structure" in keys:
+                    # A table-of-contents. It's the small index file (not an in-network file),
+                    # so reading it whole to discover the in-network URLs is fine; fan out.
+                    refs = tic_index.parse_index(stream.read())
+                    child_srcs = [r.location for r in refs]
+                else:
+                    # An in-network file (or external ref file). Honor the recon cap BEFORE
+                    # streaming another file so a `--max-files` probe stays cheap; hitting it
+                    # marks the run incomplete (a capped run must never write as complete).
+                    if self.max_files is not None and self.stats.files >= self.max_files:
+                        self._capped = True
+                        self.stats.failures.append(
+                            f"hit --max-files cap ({self.max_files}) — probe run, not complete")
+                        return
+                    self.stats.files += 1
+                    for npi in _stream_npis(stream, external_after):
+                        self._admit(npi)
+            finally:
+                for c in closers:
+                    try:
+                        c.close()
+                    except Exception:
+                        pass
+        except Exception as e:  # noqa: BLE001 - one bad file is a hole, not a crash
+            self.stats.failed_files += 1
+            self.stats.failures.append(f"{src}: {type(e).__name__}: {e}")
+            return
         # Fan out to ToC children, then to external provider-reference files.
         for child in child_srcs:
             self.harvest(child)
@@ -176,20 +203,30 @@ def _resolve_ref(parent: str, ref: str) -> str:
     return str(Path(parent).parent / ref)
 
 
-def harvest_to_bitmap(payer_id: str, src: str, root: Path) -> tuple[membership.ManifestEntry | None, TicStats]:
+def harvest_to_bitmap(payer_id: str, src: str, root: Path, *, complete_only: bool = True,
+                      max_files: int | None = None) -> tuple[membership.ManifestEntry | None, TicStats]:
     """Harvest `payer_id` from TiC source `src` and write its membership bitmap (method
-    "tic", level "payer"). Returns (entry, stats); entry is None if nothing was collected
-    (a failed/empty harvest never overwrites a good bitmap with an empty one)."""
+    "tic", level "payer"). Returns (entry, stats); entry is None (nothing written) when:
+
+      • the harvest collected nothing (never overwrite a good bitmap with an empty one); or
+      • `complete_only` and the fan-out was PARTIAL — a ToC child or external provider-ref
+        file failed to read, a fatal error aborted the walk, or a `--max-files` probe cap was
+        hit. This mirrors Rail 1's completeness guard: a partial in-network set served as
+        complete would make providers in the missing files read as a fabricated "no", so a
+        partial run keeps the last-good bitmap and lets `/healthz` staleness surface instead.
+    """
     if payer_id not in _CATALOG_IDS:
         print(f"Warning: '{payer_id}' is not in app/catalog.py — it won't surface as a "
               f"named filter until added there.", flush=True)
-    h = TicHarvester()
+    h = TicHarvester(max_files=max_files)
     try:
         h.harvest(src)
     except Exception as e:  # noqa: BLE001
         h.stats.error = f"{type(e).__name__}: {e}"
     stats = h.finalize()
     if stats.unique_npis == 0:
+        return None, stats
+    if complete_only and not stats.complete:
         return None, stats
     cat = _CATALOG.get(payer_id, {})
     entry = membership.write_payer(
@@ -205,20 +242,36 @@ def harvest_to_bitmap(payer_id: str, src: str, root: Path) -> tuple[membership.M
 
 
 def main(argv: list[str]) -> None:
-    if len(argv) < 3:
-        print(__doc__)
-        raise SystemExit(2)
-    payer, src = argv[1], argv[2]
+    ap = argparse.ArgumentParser(
+        description="Streaming Transparency-in-Coverage harvest -> membership bitmap.")
+    ap.add_argument("payer", help="catalog id (e.g. aetna, anthem) so the bitmap supersedes the estimate")
+    ap.add_argument("src", help="TiC table-of-contents index URL/path, or a single in-network file")
+    ap.add_argument("--max-files", type=int, default=None,
+                    help="recon cap on in-network files streamed; hitting it marks the run "
+                         "incomplete (a probe never writes a partial set as complete)")
+    ap.add_argument("--allow-partial", action="store_true",
+                    help="opt out of the completeness guard and write whatever was collected "
+                         "(unsafe — a hole reads as a fabricated 'no'; for debugging only)")
+    args = ap.parse_args(argv[1:])
+
     root = Path(settings.membership_dir)
-    entry, stats = harvest_to_bitmap(payer, src, root)
+    entry, stats = harvest_to_bitmap(args.payer, args.src, root,
+                                     complete_only=not args.allow_partial, max_files=args.max_files)
+    payer = args.payer
     print(f"[{payer}] files={stats.files} external_refs={stats.external_refs} "
           f"npi_tokens={stats.npi_values_seen:,} rejected={stats.rejected:,} "
-          f"unique={stats.unique_npis:,}", flush=True)
+          f"unique={stats.unique_npis:,} failed_files={stats.failed_files}", flush=True)
     if stats.error:
         print(f"[{payer}] stopped early: {stats.error}", flush=True)
+    for f in stats.failures[:10]:
+        print(f"[{payer}]   hole: {f}", flush=True)
     if entry is not None:
         print(f"[{payer}] wrote {root / entry.file} ({entry.count:,} NPIs, "
               f"{entry.sha256[:12]}…).", flush=True)
+    elif stats.unique_npis and not stats.complete:
+        print(f"[{payer}] partial fan-out ({stats.unique_npis:,} NPIs but "
+              f"{len(stats.failures)} hole(s)) — bitmap NOT written (kept last good; "
+              f"staleness surfaces).", flush=True)
     else:
         print(f"[{payer}] harvest collected 0 NPIs — bitmap NOT written (kept last good).",
               flush=True)

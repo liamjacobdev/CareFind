@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -290,6 +291,89 @@ def harvest_to_bitmap(payer_id: str, root: Path, *, complete_only: bool = True,
     return entry, stats
 
 
+@dataclass
+class ShardOutcome:
+    """One shard's result within a sharded harvest — enough to (a) enforce the completeness
+    guard and (b) surface a suspiciously empty shard (an ignored/typo'd facet value, which
+    would be a silent gap in the union) to a human."""
+    value: str
+    npis: int
+    complete: bool                     # exhausted the shard (no cursor left, no error)
+    error: str | None = None
+
+
+def harvest_sharded_to_bitmap(
+    payer_id: str, root: Path, *, facet: str, values: Iterable[str],
+    complete_only: bool = True, page_size: int = 100, max_pages: int | None = None,
+    max_npis: int | None = None, client: httpx.Client | None = None,
+) -> tuple[membership.ManifestEntry | None, list[ShardOutcome]]:
+    """Harvest a giant Plan-Net directory that a single unfiltered browse can't exhaust, by
+    walking it one `facet=value` shard at a time IN ONE PROCESS, unioning the NPIs, and
+    writing the bitmap **once** — only if EVERY shard completed.
+
+    This is the accumulating counterpart to `harvest_to_bitmap`, which builds a fresh bitmap
+    per run and `write_payer` *overwrites* the blob — so running `--shard state=CA` then
+    `--shard state=NY` as separate jobs would leave only NY. Unioning in one process fixes
+    that.
+
+    The completeness guard is *stricter* here than for a single walk: the union equals the
+    whole directory only when the facet's value set is exhaustive, so ANY shard that left a
+    resume cursor or errored blocks the write (keep the last-good bitmap; let `/healthz`
+    staleness surface). A partial union served as complete would make in-network providers in
+    the missing shard read as a fabricated "no". Callers MUST pass a `values` list that
+    enumerates the facet's full value set (e.g. every state + DC + territories) so the union
+    is gap-free; a shard that completes with 0 NPIs is reported loudly as a likely ignored
+    facet value, not silently trusted.
+    """
+    cfg = _resolve_cfg(payer_id)
+    owns_client = client is None
+    client = client or httpx.Client()
+    all_npis: set[str] = set()
+    outcomes: list[ShardOutcome] = []
+    try:
+        for val in values:
+            browse = {"_include": "PractitionerRole:practitioner", "_count": page_size,
+                      facet: val}
+            npis, stats = harvest_endpoint(cfg, page_size=page_size, max_pages=max_pages,
+                                           max_npis=max_npis, browse_params=browse,
+                                           client=client)
+            all_npis |= npis
+            complete = stats.next_cursor is None and stats.error is None
+            outcomes.append(ShardOutcome(value=str(val), npis=len(npis), complete=complete,
+                                         error=stats.error))
+    finally:
+        if owns_client:
+            client.close()
+
+    incomplete = [o for o in outcomes if not o.complete]
+    if complete_only and incomplete:
+        return None, outcomes            # trust guard: any incomplete shard => write nothing
+    if not all_npis:
+        return None, outcomes
+    bitmap, admitted, rejected = membership.build_bitmap(all_npis)
+    entry = membership.write_payer(
+        root,
+        id=cfg["id"], label=cfg.get("label", cfg["id"]),
+        category=cfg.get("category", "commercial"),
+        level="payer", method="fhir-plannet",
+        source_url=cfg.get("verify_url") or cfg.get("directory_url") or cfg["base_url"],
+        states=cfg.get("states"), bitmap=bitmap,
+        max_age_days=settings.payer_max_age_days,
+    )
+    return entry, outcomes
+
+
+def _shard_values(values: str | None, values_file: str | None) -> list[str]:
+    """Parse a facet's value set from `--values a,b,c` or a `--values-file` (comma- or
+    newline-separated). Empties are dropped; order is preserved for a readable run log."""
+    if values_file:
+        raw = Path(values_file).read_text(encoding="utf-8")
+        return [v.strip() for v in raw.replace(",", "\n").splitlines() if v.strip()]
+    if values:
+        return [v.strip() for v in values.split(",") if v.strip()]
+    raise SystemExit("--facet requires --values a,b,c or --values-file PATH")
+
+
 def main(argv: list[str]) -> None:
     ap = argparse.ArgumentParser(description="Offline FHIR Plan-Net bulk harvest -> membership bitmap.")
     ap.add_argument("payer", help="validated payer id (e.g. cigna, unitedhealthcare, humana)")
@@ -297,15 +381,54 @@ def main(argv: list[str]) -> None:
     ap.add_argument("--max-npis", type=int, default=None)
     ap.add_argument("--page-size", type=int, default=100)
     ap.add_argument("--shard", default=None,
-                    help="a browse facet appended to the query, e.g. 'state=CA' (endpoint-specific)")
+                    help="a single browse facet appended to the query, e.g. 'state=CA' "
+                         "(endpoint-specific) — for one-shard recon; use --facet/--values to "
+                         "harvest+union a giant's full value set in one run")
+    ap.add_argument("--facet", default=None,
+                    help="shard-and-union facet name, e.g. 'address-state' or 'state'; "
+                         "requires --values / --values-file enumerating the WHOLE directory")
+    ap.add_argument("--values", default=None,
+                    help="comma-separated facet values covering the whole directory (e.g. all "
+                         "states + DC + territories)")
+    ap.add_argument("--values-file", default=None,
+                    help="file of facet values (comma- or newline-separated)")
     ap.add_argument("--dry-run", action="store_true", help="harvest + report, don't write the bitmap")
     args = ap.parse_args(argv[1:])
+
+    root = Path(settings.membership_dir)
+
+    # ── sharded (accumulating) path for the giants: harvest every facet value, union, write once
+    if args.facet:
+        if args.dry_run:
+            raise SystemExit("--dry-run is for single-shard recon; use --shard "
+                             f"{args.facet}=<one-value> --max-pages N --dry-run instead.")
+        values = _shard_values(args.values, args.values_file)
+        entry, outcomes = harvest_sharded_to_bitmap(
+            args.payer, root, facet=args.facet, values=values, page_size=args.page_size,
+            max_pages=args.max_pages, max_npis=args.max_npis)
+        incomplete = [o for o in outcomes if not o.complete]
+        empty = [o for o in outcomes if o.complete and o.npis == 0]
+        print(f"[{args.payer}] sharded facet={args.facet} shards={len(outcomes)} "
+              f"incomplete={len(incomplete)} empty={len(empty)}", flush=True)
+        for o in incomplete:
+            print(f"[{args.payer}]   incomplete shard {args.facet}={o.value}: "
+                  f"{o.error or 'resume cursor left'}", flush=True)
+        if empty:
+            print(f"[{args.payer}]   WARNING empty-but-complete shards (facet may be ignored "
+                  f"or value typo'd — a silent gap): {[o.value for o in empty]}", flush=True)
+        if entry is not None:
+            print(f"[{args.payer}] wrote {root / entry.file} ({entry.count:,} NPIs, "
+                  f"{entry.sha256[:12]}…).", flush=True)
+        else:
+            why = ("one or more shards did not complete — a partial union is never served as "
+                   "complete" if incomplete else "collected 0 NPIs")
+            print(f"[{args.payer}] {why} — bitmap NOT written (kept last good).", flush=True)
+        return
 
     browse: dict[str, Any] = {"_include": "PractitionerRole:practitioner", "_count": args.page_size}
     if args.shard and "=" in args.shard:
         k, v = args.shard.split("=", 1)
         browse[k] = v
-    root = Path(settings.membership_dir)
 
     if args.dry_run:
         cfg = _resolve_cfg(args.payer)

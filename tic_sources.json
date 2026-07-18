@@ -1,0 +1,26 @@
+{
+  "_comment": "Per-payer Transparency-in-Coverage source URLs for the TiC harvest rail (app/harvest_tic.py, .github/workflows/harvest-tic.yml). 'payer' MUST match a catalog id in app/catalog.py so the verified bitmap supersedes the estimate. A URL may be a TiC table-of-contents index (auto-detected via `reporting_structure` and fanned out) OR a single in-network file. NPIs are Luhn-gated; a partial fan-out is NEVER written as complete (completeness guard). Re-run monthly.",
+
+  "_aetna_resolver": {
+    "how_urls_were_found": "Aetna publishes MRFs through the HealthSparq/Kyruus SPA at health1.aetna.com (brandCode=ALICFI = fully-insured). The SPA's backend POST /healthsparq/public/service/v2/mrf/all points at a public, auth-free CDN metadata file. Captured 2026-07-18 via the in-app browser's network inspector.",
+    "cdn_base": "https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/",
+    "metadata_index": "https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/latest_metadata.json",
+    "metadata_shape": "{ files: [ { reportingEntityName, reportingPlans[], fileSchema: IN_NETWORK_RATES|TABLE_OF_CONTENTS|ALLOWED_AMOUNTS, fileName, filePath } ] }. Full download URL = cdn_base + filePath. As of 2026-07-05: 4722 files (4700 in-network, 19 ToC, 3 allowed-amounts); 2467 are 'Aetna Life Insurance Company' (national).",
+    "monthly_refresh": "URLs carry the publish date (e.g. 2026-07-05) and change monthly, so this file goes stale. To refresh: fetch latest_metadata.json, take the newest TABLE_OF_CONTENTS (or a national IN_NETWORK_RATES) filePath, and update the 'url' below. NOTE: harvest_tic does not yet resolve latest_metadata.json itself (it is HealthSparq metadata, not a TiC reporting_structure); teaching it to fan out from the metadata would make this source self-refreshing — a good follow-up.",
+    "first_run_runbook": "The national in-network file is ~3.3 GB gzipped, so the harvest-tic workflow raises INNETWORK_INGEST_MAX_BYTES to 5 GiB (default app bound is 2 GB and would fast-fail). BEFORE a full run, probe cheaply: dispatch harvest-tic.yml with payer=aetna, url=<a small state ToC below>, max_files=2 — a capped probe writes nothing but proves the fan-out shape (inline vs external provider_references, file sizes, whether it completes)."
+  },
+
+  "sources": [
+    {
+      "payer": "aetna",
+      "url": "https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/2026-07-05/inNetworkRates/2026-07-05_pl-10j-hr23_Aetna-Life-Insurance-Company.json.gz",
+      "retrieved": "2026-07-18",
+      "note": "Aetna Life Insurance Company — national fully-insured plan (Open Access Managed Choice). Single ~3.3 GB gzip in-network file: ONE file => no fan-out holes => completes and writes if it fits the raised byte bound. Broadest single-file Aetna network. Requires INNETWORK_INGEST_MAX_BYTES > ~3.4 GB (the workflow default of 5 GiB covers it)."
+    }
+  ],
+
+  "_alternate_aetna_targets": {
+    "national_toc_full_fanout": "https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/2026-07-05/tableOfContents/2026-07-05_Aetna-Life-Insurance-Company_index.json.gz  (13 plan IDs; fans out to many multi-GB files — likely exceeds one job's 6h/disk budget, so the guard keeps last-good. Use only after sharding/scoping.)",
+    "small_state_toc_for_probe": "https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/2026-07-05/tableOfContents/2026-07-05_Aetna-Health-Inc----Maine_index.json.gz  (1 plan; small, bounded — ideal for a --max-files probe to prove the pipeline end-to-end in CI)."
+  }
+}

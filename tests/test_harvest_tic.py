@@ -177,6 +177,80 @@ def test_cli_empty_harvest_reports_not_written(tmp_path, monkeypatch, capsys):
     assert "NOT written" in capsys.readouterr().out
 
 
+# ── completeness guard: a partial fan-out must NOT ship as complete ────────────
+def test_partial_fanout_is_not_written_as_complete(tmp_path):
+    """THE Rail-2 trust test (mirrors Rail 1): a ToC whose one in-network file reads but a
+    second is unreachable is a HOLE. Serving the partial set as complete would make the
+    missing file's providers read as a fabricated "no", so nothing is written."""
+    good = _write(tmp_path, "good.json", {"in_network": [
+        {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_A)]}]}]}]})
+    missing = str(tmp_path / "does_not_exist.json")
+    toc = _write(tmp_path, "toc.json", {"reporting_structure": [
+        {"reporting_plans": [{"plan_id": "p"}],
+         "in_network_files": [{"location": good}, {"location": missing}]}]})
+    entry, stats = harvest_tic.harvest_to_bitmap("aetna", toc, tmp_path / "payers")
+    assert stats.unique_npis == 1 and stats.failed_files == 1 and stats.complete is False
+    assert entry is None and not (tmp_path / "payers" / "aetna.roaring").exists()
+    # An explicit opt-out of the guard may still write the partial set (debugging only).
+    entry2, _ = harvest_tic.harvest_to_bitmap(
+        "aetna", toc, tmp_path / "payers", complete_only=False)
+    assert entry2 is not None and (tmp_path / "payers" / "aetna.roaring").exists()
+
+
+def test_failed_external_ref_blocks_write(tmp_path):
+    """A missing EXTERNAL provider_references location is the same kind of hole."""
+    src = _write(tmp_path, "in.json", {
+        "in_network": [{"negotiated_rates": [{"provider_references": [1]}]}],
+        "provider_references": [{"provider_group_id": 1,
+                                 "location": str(tmp_path / "missing_ref.json")}]})
+    entry, stats = harvest_tic.harvest_to_bitmap("aetna", src, tmp_path / "payers")
+    assert stats.failed_files == 1 and entry is None
+
+
+def test_max_files_probe_cap_marks_incomplete(tmp_path):
+    """`--max-files` recon must never write a partial set as complete."""
+    f1 = _write(tmp_path, "f1.json", {"in_network": [
+        {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_A)]}]}]}]})
+    f2 = _write(tmp_path, "f2.json", {"in_network": [
+        {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_B)]}]}]}]})
+    toc = _write(tmp_path, "toc.json", {"reporting_structure": [
+        {"reporting_plans": [{"plan_id": "p"}],
+         "in_network_files": [{"location": f1}, {"location": f2}]}]})
+    h = harvest_tic.TicHarvester(max_files=1)
+    h.harvest(toc)
+    stats = h.finalize()
+    assert stats.files == 1 and stats.complete is False and stats.failures
+    # Through the writer, the capped run keeps last-good.
+    entry, stats2 = harvest_tic.harvest_to_bitmap("aetna", toc, tmp_path / "payers", max_files=1)
+    assert entry is None
+
+
+def test_cli_partial_reports_not_written(tmp_path, monkeypatch, capsys):
+    from app.config import settings
+    good = _write(tmp_path, "good.json", {"in_network": [
+        {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_A)]}]}]}]})
+    toc = _write(tmp_path, "toc.json", {"reporting_structure": [
+        {"reporting_plans": [{"plan_id": "p"}],
+         "in_network_files": [{"location": good}, {"location": str(tmp_path / "gone.json")}]}]})
+    monkeypatch.setattr(settings, "membership_dir", str(tmp_path / "payers"))
+    harvest_tic.main(["harvest_tic", "aetna", toc])
+    out = capsys.readouterr().out
+    assert "NOT written" in out and "hole" in out
+    assert not (tmp_path / "payers" / "aetna.roaring").exists()
+
+
+def test_cli_allow_partial_writes(tmp_path, monkeypatch, capsys):
+    from app.config import settings
+    good = _write(tmp_path, "good.json", {"in_network": [
+        {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_A)]}]}]}]})
+    toc = _write(tmp_path, "toc.json", {"reporting_structure": [
+        {"reporting_plans": [{"plan_id": "p"}],
+         "in_network_files": [{"location": good}, {"location": str(tmp_path / "gone.json")}]}]})
+    monkeypatch.setattr(settings, "membership_dir", str(tmp_path / "payers"))
+    harvest_tic.main(["harvest_tic", "aetna", toc, "--allow-partial"])
+    assert (tmp_path / "payers" / "aetna.roaring").exists()
+
+
 def test_open_binary_streams_a_url(tmp_path, monkeypatch):
     # The URL path goes through download.stream_to_spool; stub it to return a local spool.
     import io

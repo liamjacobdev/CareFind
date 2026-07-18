@@ -26,6 +26,14 @@ on:
         description: "Space-separated payer ids (blank = the default fast set)"
         required: false
         default: ""
+      facet:
+        description: "Shard-and-union a GIANT by this browse facet (e.g. 'address-state'). Dispatch ONE payer at a time when set."
+        required: false
+        default: ""
+      values:
+        description: "Comma-separated facet values covering the WHOLE directory (e.g. all states+DC+territories). Required with facet."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -54,6 +62,8 @@ jobs:
           # individually via workflow_dispatch. A failed/incomplete harvest is non-fatal —
           # the completeness guard simply leaves the last-good bitmap in place.
           PAYERS_INPUT: ${{ github.event.inputs.payers }}
+          FACET_INPUT: ${{ github.event.inputs.facet }}
+          VALUES_INPUT: ${{ github.event.inputs.values }}
         run: |
           set -u
           # Default set = payers whose Plan-Net directory allows an unfiltered browse (what
@@ -63,7 +73,15 @@ jobs:
           echo "Harvesting: $PAYERS"
           for p in $PAYERS; do
             echo "::group::harvest $p"
-            python -m app.harvest_fhir "$p" || echo "harvest $p did not complete — keeping last-good."
+            if [ -n "${FACET_INPUT}" ]; then
+              # Sharded (accumulating) path for a giant: walk every facet value in one process,
+              # union, and write once — only if EVERY shard completed (harvest_sharded_to_bitmap's
+              # guard). Dispatch ONE giant per run so it owns the sequential manifest write.
+              python -m app.harvest_fhir "$p" --facet "$FACET_INPUT" --values "$VALUES_INPUT" \
+                || echo "sharded harvest $p did not complete — keeping last-good."
+            else
+              python -m app.harvest_fhir "$p" || echo "harvest $p did not complete — keeping last-good."
+            fi
             echo "::endgroup::"
           done
 
