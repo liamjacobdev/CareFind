@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350   # under the 6h job cap; a giant that doesn't finish commits nothing
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
