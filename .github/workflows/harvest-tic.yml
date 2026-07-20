@@ -40,6 +40,10 @@ on:
         description: "Recon cap on in-network files (a probe run; writes nothing). Blank = full harvest."
         required: false
         default: ""
+      toc_top_files:
+        description: "Treat url as a table-of-contents and union its N LARGEST in-network files (sequential, low-disk), stopping once the unique-NPI union plateaus. Use for Aetna's national ToC (~283 files, 850 GB) which won't fully fit a runner. Try 8."
+        required: false
+        default: ""
       max_bytes:
         description: "Per-file download cap in bytes (INNETWORK_INGEST_MAX_BYTES). Aetna's national in-network file is ~3.3 GB, so raise this above 2 GB to harvest it. Runner has ~14 GB disk."
         required: false
@@ -71,6 +75,7 @@ jobs:
           PAYER_INPUT: ${{ github.event.inputs.payer }}
           URL_INPUT: ${{ github.event.inputs.url }}
           MAX_FILES_INPUT: ${{ github.event.inputs.max_files }}
+          TOPN_INPUT: ${{ github.event.inputs.toc_top_files }}
           # Raise the per-file download bound so a payer's multi-GB in-network file can spool
           # (default app bound is 2 GB; Aetna's national file is ~3.3 GB). Scheduled runs use
           # the input default (5 GiB). The spool lands on the runner's ~14 GB disk, then ijson
@@ -80,12 +85,14 @@ jobs:
           set -u
           MAXF=""
           if [ -n "${MAX_FILES_INPUT}" ]; then MAXF="--max-files ${MAX_FILES_INPUT}"; fi
+          TOPN=""
+          if [ -n "${TOPN_INPUT}" ]; then TOPN="--toc-top-files ${TOPN_INPUT}"; fi
 
           if [ -n "${PAYER_INPUT}" ]; then
             # Single-payer dispatch: URL is required (falls back to tic_sources.json if blank).
             if [ -n "${URL_INPUT}" ]; then
               echo "::group::harvest ${PAYER_INPUT} (dispatch url)"
-              python -m app.harvest_tic "${PAYER_INPUT}" "${URL_INPUT}" $MAXF \
+              python -m app.harvest_tic "${PAYER_INPUT}" "${URL_INPUT}" $MAXF $TOPN \
                 || echo "harvest ${PAYER_INPUT} did not complete — keeping last-good."
               echo "::endgroup::"
               exit 0
@@ -95,7 +102,8 @@ jobs:
             FILTER=""
           fi
 
-          # Otherwise iterate tic_sources.json (payer,url pairs). Missing file = nothing to do.
+          # Otherwise iterate tic_sources.json. Each source may carry an optional
+          # "toc_top_files" (union the N largest ToC children — for giant ToCs like Aetna).
           if [ ! -f tic_sources.json ]; then
             echo "No tic_sources.json and no dispatch url — nothing to harvest."
             exit 0
@@ -103,7 +111,7 @@ jobs:
           python - "$FILTER" "$MAXF" <<'PY'
           import json, subprocess, sys
           filt = sys.argv[1] if len(sys.argv) > 1 else ""
-          maxf = [a for a in sys.argv[2].split()] if len(sys.argv) > 2 and sys.argv[2] else []
+          maxf = sys.argv[2].split() if len(sys.argv) > 2 and sys.argv[2] else []
           try:
               sources = json.load(open("tic_sources.json")).get("sources", [])
           except Exception as e:
@@ -114,9 +122,13 @@ jobs:
                   print(f"skip {payer!r}: no real URL yet"); continue
               if filt and payer != filt:
                   continue
+              extra = list(maxf)
+              topn = s.get("toc_top_files")
+              if topn:
+                  extra += ["--toc-top-files", str(topn)]
               print(f"::group::harvest {payer}")
               # Non-fatal per payer: the completeness guard leaves last-good on any failure.
-              subprocess.run(["python", "-m", "app.harvest_tic", payer, url, *maxf], check=False)
+              subprocess.run(["python", "-m", "app.harvest_tic", payer, url, *extra], check=False)
               print("::endgroup::")
           PY
 

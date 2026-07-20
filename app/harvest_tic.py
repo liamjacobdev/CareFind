@@ -29,12 +29,14 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import os
 import sys
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any, cast
 
+import httpx
 import ijson
 from pyroaring import BitMap
 
@@ -241,6 +243,97 @@ def harvest_to_bitmap(payer_id: str, src: str, root: Path, *, complete_only: boo
     return entry, stats
 
 
+def _child_size(loc: str, client: httpx.Client) -> int:
+    """Best-effort byte size of a ToC child, to RANK children largest-first. A HEAD's
+    Content-Length for a URL, or the file size for a local path; 0 on failure (sorts last)."""
+    if loc.startswith(("http://", "https://")):
+        try:
+            r = client.head(loc, timeout=30, follow_redirects=True)
+            return int(r.headers.get("content-length") or 0)
+        except Exception:
+            return 0
+    try:
+        return os.path.getsize(loc)
+    except OSError:
+        return 0
+
+
+@dataclass
+class Convergence:
+    """One file's contribution to the running union, so a human can SEE the payer's network
+    saturate across plan files (the empirical completeness signal)."""
+    file: str
+    added: int
+    total: int
+    growth: float
+
+
+def harvest_toc_top_n(
+    payer_id: str, toc_src: str, root: Path, *, top_n: int, plateau: float = 0.005,
+    complete_only: bool = True,
+) -> tuple[membership.ManifestEntry | None, TicStats, list[Convergence]]:
+    """Harvest the UNION of a payer's N largest in-network files from a TiC table-of-contents,
+    stopping early once the unique-NPI union plateaus (a file adds < `plateau` fraction new).
+
+    Why this exists: a payer's full ToC can fan out to hundreds of multi-GB files (Aetna's
+    national ToC ≈ 283 files ≈ 850 GB) — too big for one job, AND a single plan file served as
+    the payer's WHOLE network fabricates "no" for providers in its other plans. Payers repeat
+    the same provider network across plans, so unioning the broadest few files converges on the
+    complete national set; the plateau is the empirical completeness signal (LOGGED, never
+    hidden — the operator reads it before trusting the result). Files stream sequentially so
+    peak disk stays ~one file (runner-feasible), not the sum. Writes only if EVERY file it
+    pulled completed (completeness guard) — a hole keeps last-good.
+    """
+    if payer_id not in _CATALOG_IDS:
+        print(f"Warning: '{payer_id}' is not in app/catalog.py — it won't surface as a "
+              f"named filter until added there.", flush=True)
+    h = TicHarvester()
+    convergence: list[Convergence] = []
+    with httpx.Client() as client:
+        stream, closers = _open_binary(toc_src)
+        try:
+            refs = tic_index.parse_index(stream.read())
+        finally:
+            for c in closers:
+                try:
+                    c.close()
+                except Exception:
+                    pass
+        children = sorted({r.location for r in refs})
+        if not children:
+            h.stats.error = "table-of-contents listed no in-network files"
+            return None, h.finalize(), convergence
+        ranked = sorted(children, key=lambda u: _child_size(u, client), reverse=True)[:top_n]
+        for i, loc in enumerate(ranked, 1):
+            before = len(h.bitmap)
+            h.harvest(loc)                        # unions into h.bitmap; sequential -> low disk
+            total = len(h.bitmap)
+            added = total - before
+            growth = (added / total) if total else 0.0
+            convergence.append(Convergence(loc, added, total, growth))
+            print(f"[{payer_id}] file {i}/{len(ranked)} +{added:,} -> {total:,} unique "
+                  f"(+{growth * 100:.2f}%) failed_files={h.stats.failed_files}", flush=True)
+            if h.stats.failed_files:
+                break                             # a hole -> the guard will refuse the write
+            if i >= 2 and growth < plateau:
+                print(f"[{payer_id}] union plateaued (<{plateau * 100:.2f}% new) — network "
+                      f"saturated across plans, stopping.", flush=True)
+                break
+    stats = h.finalize()
+    if stats.unique_npis == 0:
+        return None, stats, convergence
+    if complete_only and not stats.complete:
+        return None, stats, convergence
+    cat = _CATALOG.get(payer_id, {})
+    entry = membership.write_payer(
+        root, id=payer_id, label=cat.get("label", payer_id),
+        category=cat.get("category", "commercial"), level="payer",
+        method="tic", source_url=toc_src, states=cat.get("states"),
+        bitmap=h.bitmap, max_age_days=settings.payer_max_age_days,
+    )
+    return entry, stats, convergence
+
+
 def main(argv: list[str]) -> None:
     ap = argparse.ArgumentParser(
         description="Streaming Transparency-in-Coverage harvest -> membership bitmap.")
@@ -249,15 +342,27 @@ def main(argv: list[str]) -> None:
     ap.add_argument("--max-files", type=int, default=None,
                     help="recon cap on in-network files streamed; hitting it marks the run "
                          "incomplete (a probe never writes a partial set as complete)")
+    ap.add_argument("--toc-top-files", type=int, default=None, metavar="N",
+                    help="treat src as a table-of-contents and union its N LARGEST in-network "
+                         "files (sequential, low-disk), stopping once the unique-NPI union "
+                         "plateaus — for giant ToCs that don't fit a job (e.g. Aetna national)")
+    ap.add_argument("--plateau", type=float, default=0.005,
+                    help="with --toc-top-files: stop once a file adds < this fraction new NPIs "
+                         "(default 0.005 = 0.5%%)")
     ap.add_argument("--allow-partial", action="store_true",
                     help="opt out of the completeness guard and write whatever was collected "
                          "(unsafe — a hole reads as a fabricated 'no'; for debugging only)")
     args = ap.parse_args(argv[1:])
 
     root = Path(settings.membership_dir)
-    entry, stats = harvest_to_bitmap(args.payer, args.src, root,
-                                     complete_only=not args.allow_partial, max_files=args.max_files)
     payer = args.payer
+    if args.toc_top_files is not None:
+        entry, stats, convergence = harvest_toc_top_n(
+            args.payer, args.src, root, top_n=args.toc_top_files, plateau=args.plateau,
+            complete_only=not args.allow_partial)
+    else:
+        entry, stats = harvest_to_bitmap(args.payer, args.src, root,
+                                         complete_only=not args.allow_partial, max_files=args.max_files)
     print(f"[{payer}] files={stats.files} external_refs={stats.external_refs} "
           f"npi_tokens={stats.npi_values_seen:,} rejected={stats.rejected:,} "
           f"unique={stats.unique_npis:,} failed_files={stats.failed_files}", flush=True)
