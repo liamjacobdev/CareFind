@@ -268,3 +268,87 @@ def test_start_url_resumes_from_cursor():
         return_value=httpx.Response(200, json=_bundle([_practitioner("b", NPI_B), _role("b")])))
     out, stats = harvest_endpoint({"id": "p", "base_url": base}, start_url=resume)
     assert out == {NPI_B} and stats.pages == 1   # resumed from the cursor, no first-page refetch
+
+
+# ── sharded (accumulating) harvest for the giants — union + completeness guard ─
+@respx.mock
+def test_sharded_union_writes_when_all_shards_complete(tmp_path, monkeypatch):
+    """A giant walked one facet value at a time in ONE process must UNION the shards' NPIs
+    and write once — the fix for `write_payer` overwriting per run (CA then NY would else
+    leave only NY)."""
+    base = "https://payer.example/r4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [
+        {"id": "humana", "label": "Humana", "base_url": base}])
+    respx.get(f"{base}/PractitionerRole", params={"state": "CA"}).mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("a", NPI_A), _role("a")])))
+    respx.get(f"{base}/PractitionerRole", params={"state": "NY"}).mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("b", NPI_B), _role("b")])))
+    entry, outcomes = harvest_fhir.harvest_sharded_to_bitmap(
+        "humana", tmp_path, facet="state", values=["CA", "NY"])
+    assert entry is not None and entry.count == 2       # unioned, not overwritten
+    assert (tmp_path / "humana.roaring").exists()
+    assert all(o.complete for o in outcomes) and {o.value for o in outcomes} == {"CA", "NY"}
+
+
+@respx.mock
+def test_sharded_incomplete_shard_writes_nothing(tmp_path, monkeypatch):
+    """THE critical trust test: if any shard didn't exhaust (a resume cursor is left), the
+    union is a hole-y partial. Serving it as complete would make the missing shard's
+    in-network providers read as a fabricated "no" — so nothing is written."""
+    base = "https://payer.example/r4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [
+        {"id": "humana", "label": "Humana", "base_url": base}])
+    respx.get(f"{base}/PractitionerRole", params={"state": "CA"}).mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("a", NPI_A), _role("a")])))
+    # NY leaves a next cursor after its one page (max_pages=1) -> incomplete shard.
+    respx.get(f"{base}/PractitionerRole", params={"state": "NY"}).mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("b", NPI_B), _role("b")],
+                                                      next_url=f"{base}/PractitionerRole?page=2")))
+    entry, outcomes = harvest_fhir.harvest_sharded_to_bitmap(
+        "humana", tmp_path, facet="state", values=["CA", "NY"], max_pages=1)
+    assert entry is None and not (tmp_path / "humana.roaring").exists()
+    assert any(not o.complete for o in outcomes)
+    # An explicit opt-out of the guard may still write the partial union.
+    entry2, _ = harvest_fhir.harvest_sharded_to_bitmap(
+        "humana", tmp_path, facet="state", values=["CA", "NY"], max_pages=1, complete_only=False)
+    assert entry2 is not None and (tmp_path / "humana.roaring").exists()
+
+
+@respx.mock
+def test_sharded_all_empty_writes_nothing(tmp_path, monkeypatch):
+    base = "https://payer.example/r4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [
+        {"id": "humana", "label": "Humana", "base_url": base}])
+    respx.get(f"{base}/PractitionerRole").mock(return_value=httpx.Response(200, json=_bundle([])))
+    entry, outcomes = harvest_fhir.harvest_sharded_to_bitmap(
+        "humana", tmp_path, facet="state", values=["CA", "NY"])
+    assert entry is None and not (tmp_path / "humana.roaring").exists()
+    assert all(o.complete and o.npis == 0 for o in outcomes)   # complete but empty -> reported
+
+
+@respx.mock
+def test_cli_facet_values_writes_union(tmp_path, monkeypatch, capsys):
+    base = "https://payer.example/r4"
+    monkeypatch.setattr(settings, "load_payers", lambda: [{"id": "humana", "label": "Humana", "base_url": base}])
+    monkeypatch.setattr(settings, "membership_dir", str(tmp_path))
+    respx.get(f"{base}/PractitionerRole", params={"state": "CA"}).mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("a", NPI_A), _role("a")])))
+    respx.get(f"{base}/PractitionerRole", params={"state": "NY"}).mock(
+        return_value=httpx.Response(200, json=_bundle([_practitioner("b", NPI_B), _role("b")])))
+    harvest_fhir.main(["harvest_fhir", "humana", "--facet", "state", "--values", "CA,NY"])
+    assert (tmp_path / "humana.roaring").exists() and "wrote" in capsys.readouterr().out
+
+
+def test_cli_facet_with_dry_run_is_rejected(monkeypatch):
+    monkeypatch.setattr(settings, "load_payers", lambda: [{"id": "humana", "base_url": "u"}])
+    with pytest.raises(SystemExit):
+        harvest_fhir.main(["harvest_fhir", "humana", "--facet", "state", "--values", "CA", "--dry-run"])
+
+
+def test_shard_values_parses_inline_and_file(tmp_path):
+    assert harvest_fhir._shard_values("CA, NY ,TX", None) == ["CA", "NY", "TX"]
+    f = tmp_path / "states.txt"
+    f.write_text("CA\nNY,TX\n\n", encoding="utf-8")
+    assert harvest_fhir._shard_values(None, str(f)) == ["CA", "NY", "TX"]
+    with pytest.raises(SystemExit):
+        harvest_fhir._shard_values(None, None)

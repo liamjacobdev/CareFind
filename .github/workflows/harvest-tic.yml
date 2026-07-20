@@ -1,0 +1,146 @@
+# Rail 2 — offline-harvest a payer's Transparency-in-Coverage (TiC) in-network files into a
+# membership bitmap, so payers that FHIR Plan-Net can't reach (Aetna, Anthem/Elevance, BCBS
+# plans, Kaiser, Centene) become instant, always-on verified filters.
+#
+# This is the TiC counterpart to harvest-payers.yml. It runs `app.harvest_tic <payer> <url>`
+# per source and commits payers/, which triggers Vercel's GitHub integration to redeploy. The
+# harvester only writes a COMPLETE fan-out (app.harvest_tic.harvest_to_bitmap's completeness
+# guard) — if any ToC child or external provider-reference file fails to read, the partial set
+# is NOT shipped as complete (a missing in-network file would make its providers read as a
+# fabricated "no"); the last-good bitmap stays and /healthz staleness surfaces instead.
+#
+# Race-free by design: one sequential job (not a parallel matrix) owns the shared
+# payers/manifest.json, then commits once.
+#
+# Runner limits to respect (TiC files are HUGE):
+#   • ~14 GB RAM — fine; the harvester ijson-streams and never lands a whole file in memory.
+#   • ~14 GB free disk — the URL path spools downloads to disk (bounded by
+#     INNETWORK_INGEST_MAX_BYTES, default 2 GB). A payer whose files exceed that needs the
+#     bound raised or the index sharded. Probe first with `--max-files` (a capped run writes
+#     nothing — the completeness guard treats a probe as incomplete).
+#   • 6h job cap — a giant that doesn't finish keeps its last-good bitmap (guard), never a partial.
+#
+# On a PUBLIC repo, GitHub Actions standard-runner minutes are unlimited, so this stays $0.
+name: Harvest verified TiC payer bitmaps
+
+on:
+  schedule:
+    - cron: "41 8 3 * *"   # monthly, ~08:41 UTC on the 3rd (offset from the FHIR harvest)
+  workflow_dispatch:
+    inputs:
+      payer:
+        description: "A single catalog id to harvest (e.g. aetna). Blank = every payer in tic_sources.json."
+        required: false
+        default: ""
+      url:
+        description: "TiC index/in-network URL for that payer (required when 'payer' is set; overrides tic_sources.json)."
+        required: false
+        default: ""
+      max_files:
+        description: "Recon cap on in-network files (a probe run; writes nothing). Blank = full harvest."
+        required: false
+        default: ""
+      toc_top_files:
+        description: "Treat url as a table-of-contents and union its N LARGEST in-network files (sequential, low-disk), stopping once the unique-NPI union plateaus. Use for Aetna's national ToC (~283 files, 850 GB) which won't fully fit a runner. Try 8."
+        required: false
+        default: ""
+      max_bytes:
+        description: "Per-file download cap in bytes (INNETWORK_INGEST_MAX_BYTES). Aetna's national in-network file is ~3.3 GB, so raise this above 2 GB to harvest it. Runner has ~14 GB disk."
+        required: false
+        default: "5368709120"   # 5 GiB — fits a runner's ~14 GB disk; covers Aetna's ~3.3 GB national file
+
+permissions:
+  contents: write
+
+concurrency:
+  group: harvest-tic
+  cancel-in-progress: false
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350   # under the 6h job cap; a giant that doesn't finish commits nothing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install runtime deps
+        run: pip install -r requirements.txt
+
+      - name: Harvest each TiC payer into its bitmap (complete fan-outs only are written)
+        env:
+          PAYER_INPUT: ${{ github.event.inputs.payer }}
+          URL_INPUT: ${{ github.event.inputs.url }}
+          MAX_FILES_INPUT: ${{ github.event.inputs.max_files }}
+          TOPN_INPUT: ${{ github.event.inputs.toc_top_files }}
+          # Raise the per-file download bound so a payer's multi-GB in-network file can spool
+          # (default app bound is 2 GB; Aetna's national file is ~3.3 GB). Scheduled runs use
+          # the input default (5 GiB). The spool lands on the runner's ~14 GB disk, then ijson
+          # streams it — memory stays flat regardless of file size.
+          INNETWORK_INGEST_MAX_BYTES: ${{ github.event.inputs.max_bytes || '5368709120' }}
+        run: |
+          set -u
+          MAXF=""
+          if [ -n "${MAX_FILES_INPUT}" ]; then MAXF="--max-files ${MAX_FILES_INPUT}"; fi
+          TOPN=""
+          if [ -n "${TOPN_INPUT}" ]; then TOPN="--toc-top-files ${TOPN_INPUT}"; fi
+
+          if [ -n "${PAYER_INPUT}" ]; then
+            # Single-payer dispatch: URL is required (falls back to tic_sources.json if blank).
+            if [ -n "${URL_INPUT}" ]; then
+              echo "::group::harvest ${PAYER_INPUT} (dispatch url)"
+              python -m app.harvest_tic "${PAYER_INPUT}" "${URL_INPUT}" $MAXF $TOPN \
+                || echo "harvest ${PAYER_INPUT} did not complete — keeping last-good."
+              echo "::endgroup::"
+              exit 0
+            fi
+            FILTER="${PAYER_INPUT}"
+          else
+            FILTER=""
+          fi
+
+          # Otherwise iterate tic_sources.json. Each source may carry an optional
+          # "toc_top_files" (union the N largest ToC children — for giant ToCs like Aetna).
+          if [ ! -f tic_sources.json ]; then
+            echo "No tic_sources.json and no dispatch url — nothing to harvest."
+            exit 0
+          fi
+          python - "$FILTER" "$MAXF" <<'PY'
+          import json, subprocess, sys
+          filt = sys.argv[1] if len(sys.argv) > 1 else ""
+          maxf = sys.argv[2].split() if len(sys.argv) > 2 and sys.argv[2] else []
+          try:
+              sources = json.load(open("tic_sources.json")).get("sources", [])
+          except Exception as e:
+              print(f"Could not read tic_sources.json: {e}"); sys.exit(0)
+          for s in sources:
+              payer, url = s.get("payer"), s.get("url")
+              if not payer or not url or "example" in (url or ""):
+                  print(f"skip {payer!r}: no real URL yet"); continue
+              if filt and payer != filt:
+                  continue
+              extra = list(maxf)
+              topn = s.get("toc_top_files")
+              if topn:
+                  extra += ["--toc-top-files", str(topn)]
+              print(f"::group::harvest {payer}")
+              # Non-fatal per payer: the completeness guard leaves last-good on any failure.
+              subprocess.run(["python", "-m", "app.harvest_tic", payer, url, *extra], check=False)
+              print("::endgroup::")
+          PY
+
+      - name: Commit refreshed bitmaps
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add payers/
+          if git diff --cached --quiet; then
+            echo "No TiC payer bitmap changed this run."
+          else
+            git commit -m "data: refresh verified TiC payer bitmaps (auto)"
+            git push
+            echo "Pushed refreshed TiC payer bitmaps — Vercel will redeploy."
+          fi

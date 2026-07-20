@@ -6,7 +6,6 @@ innetwork.db
 innetwork.db-wal
 innetwork.db-shm
 payers.json
-tic_sources.json
 .env
 node_modules/
 test-results/

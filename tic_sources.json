@@ -1,0 +1,26 @@
+{
+  "_comment": "Per-payer Transparency-in-Coverage source URLs for the TiC harvest rail (app/harvest_tic.py, .github/workflows/harvest-tic.yml). 'payer' MUST match a catalog id in app/catalog.py so the verified bitmap supersedes the estimate. A source may set 'toc_top_files': N to treat 'url' as a table-of-contents and union its N largest in-network files (sequential, low-disk) until the unique-NPI union plateaus — for giant ToCs that don't fit a job. Otherwise 'url' is harvested directly (a single in-network file, or a small ToC fully fanned out). NPIs are Luhn-gated; a partial fan-out is NEVER written as complete (completeness guard). Re-run monthly.",
+
+  "_aetna_resolver": {
+    "how_urls_were_found": "Aetna publishes MRFs through the HealthSparq/Kyruus SPA at health1.aetna.com (brandCode=ALICFI = fully-insured). The SPA's backend POST /healthsparq/public/service/v2/mrf/all points at a public, auth-free CDN metadata file. Captured 2026-07-18 via the in-app browser's network inspector; sizes re-measured 2026-07-20.",
+    "cdn_base": "https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/",
+    "metadata_index": "https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/latest_metadata.json",
+    "metadata_shape": "{ files: [ { reportingEntityName, reportingPlans[], fileSchema: IN_NETWORK_RATES|TABLE_OF_CONTENTS|ALLOWED_AMOUNTS, fileName, filePath } ] }. Full download URL = cdn_base + filePath. As of 2026-07-05: 4722 files (4700 in-network, 19 ToC).",
+    "sizing_measured_2026_07_20": "Each national ALIC in-network file is ~3.3 GB gzip with NPIs INLINE in provider_references[].provider_groups[].npi[] (no external fan-out). The national ToC 'Aetna-Life-Insurance-Company_index.json.gz' (13 plans) fans out to ~283 unique in-network files ≈ 850 GB total — too big to fully harvest in one job. So we DON'T fan out the whole ToC; we union its LARGEST few files via toc_top_files (Aetna repeats its network across plans, so the union plateaus fast = effectively complete).",
+    "monthly_refresh": "URLs carry the publish date (e.g. 2026-07-05) and change monthly. To refresh: fetch latest_metadata.json, take the newest TABLE_OF_CONTENTS filePath for 'Aetna Life Insurance Company', and update 'url' below. (harvest_tic doesn't yet resolve latest_metadata.json itself — a good follow-up would make this self-refreshing.)"
+  },
+
+  "sources": [
+    {
+      "payer": "aetna",
+      "url": "https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/2026-07-05/tableOfContents/2026-07-05_Aetna-Life-Insurance-Company_index.json.gz",
+      "toc_top_files": 8,
+      "retrieved": "2026-07-20",
+      "note": "Aetna Life Insurance Company national ToC (13 plans -> ~283 in-network files). toc_top_files unions the 8 LARGEST (broadest national networks, ~3.3 GB each, streamed sequentially so peak disk ~one file) and stops once the unique-NPI union plateaus. WATCH the job log's convergence lines: if the last file adds <~0.5% new NPIs, the national set is effectively complete; if it's still climbing, raise toc_top_files. Needs INNETWORK_INGEST_MAX_BYTES > 3.4 GB (workflow default 5 GiB)."
+    }
+  ],
+
+  "_trust_note": "A single Aetna plan file served as all-of-Aetna would fabricate 'no' for providers in Aetna's other plans, which is worse than the current 'estimated'. The toc_top_files union + the convergence log is how we make the national set trust-safe: only trust Aetna as verified once the union has plateaued. TiC is payer-level ('listed in the in-network file') — the badge still says 'confirm your specific plan'.",
+
+  "_probe_first": "Before the full run, dispatch harvest-tic.yml with payer=aetna, url=<a small state ToC>, max_files=2 to prove the pipeline cheaply (writes nothing). Small state ToC example: https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/2026-07-05/tableOfContents/2026-07-05_Aetna-Health-Inc----Maine_index.json.gz"
+}
