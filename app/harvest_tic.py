@@ -81,7 +81,10 @@ def _open_binary(src: str) -> tuple[IO[bytes], list[Any]]:
     head = raw.read(2)
     raw.seek(0)
     if head == b"\x1f\x8b" or src.endswith(".gz"):
-        gz = gzip.GzipFile(fileobj=raw)
+        # mode="rb" is REQUIRED, not cosmetic: with no mode, GzipFile infers it from
+        # `fileobj.mode`, and a spooled download (SpooledTemporaryFile, "w+b") makes it open
+        # for WRITING -> every gzipped URL died with "read() on write-only GzipFile object".
+        gz = gzip.GzipFile(fileobj=raw, mode="rb")
         closers.insert(0, gz)
         # GzipFile is a binary stream but typeshed doesn't type it as IO[bytes]; the cast
         # reflects the real contract (ijson reads it like any binary file object).
@@ -290,15 +293,19 @@ def harvest_toc_top_n(
     h = TicHarvester()
     convergence: list[Convergence] = []
     with httpx.Client() as client:
-        stream, closers = _open_binary(toc_src)
         try:
-            refs = tic_index.parse_index(stream.read())
-        finally:
-            for c in closers:
-                try:
-                    c.close()
-                except Exception:
-                    pass
+            stream, closers = _open_binary(toc_src)
+            try:
+                refs = tic_index.parse_index(stream.read())
+            finally:
+                for c in closers:
+                    try:
+                        c.close()
+                    except Exception:
+                        pass
+        except Exception as e:  # noqa: BLE001 - an unreadable ToC is a clean failure, not a crash
+            h.stats.error = f"table-of-contents unreadable: {type(e).__name__}: {e}"
+            return None, h.finalize(), convergence
         children = sorted({r.location for r in refs})
         if not children:
             h.stats.error = "table-of-contents listed no in-network files"

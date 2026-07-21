@@ -15,7 +15,7 @@
 #
 # On a PUBLIC repo, GitHub Actions standard-runner minutes are unlimited (the 2,000-min/mo
 # cap is private-repo only), which is what makes this monthly harvest genuinely $0.
-name: Harvest verified payer bitmaps
+name: "Rail 1 (FHIR): harvest payer bitmaps"
 
 on:
   schedule:
