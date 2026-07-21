@@ -285,6 +285,42 @@ def test_toc_top_n_plateau_stops_early(tmp_path):
     assert entry is not None and entry.count == 3        # never harvested small.json's NPI_D
 
 
+def test_toc_top_n_skips_files_over_the_download_cap(tmp_path, monkeypatch):
+    """REGRESSION (production, 2026-07-20): ranking largest-first hit Aetna's 8.5 GB file,
+    which blew the download cap -> DownloadTooLarge -> counted as a hole -> nothing written.
+    Oversized children must be SKIPPED (they can't be spooled) so the union proceeds using
+    the largest files that actually fit."""
+    from app.config import settings
+
+    # `big` is padded so its on-disk size exceeds the cap we set below; `small` fits.
+    big = _write(tmp_path, "big.json", {"pad": "x" * 5000, "in_network": [
+        {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_C)]}]}]}]})
+    small = _write(tmp_path, "small.json", {"in_network": [
+        {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_A), int(NPI_B)]}]}]}]})
+    toc = _write(tmp_path, "toc.json", {"reporting_structure": [
+        {"reporting_plans": [{"plan_id": "p"}],
+         "in_network_files": [{"location": big}, {"location": small}]}]})
+    monkeypatch.setattr(settings, "ingest_max_bytes", 1000)   # big > 1000 bytes, small < 1000
+
+    entry, stats, conv = harvest_tic.harvest_toc_top_n(
+        "aetna", toc, tmp_path / "payers", top_n=8, plateau=0.0)
+    assert entry is not None                      # proceeded instead of dying on the big file
+    assert entry.count == 2 and stats.failed_files == 0
+    assert [c.file for c in conv] == [small]      # oversized file skipped, not attempted
+
+
+def test_toc_top_n_all_files_over_cap_reports_cleanly(tmp_path, monkeypatch):
+    from app.config import settings
+    big = _write(tmp_path, "big.json", {"pad": "x" * 5000, "in_network": [
+        {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_A)]}]}]}]})
+    toc = _write(tmp_path, "toc.json", {"reporting_structure": [
+        {"reporting_plans": [{"plan_id": "p"}], "in_network_files": [{"location": big}]}]})
+    monkeypatch.setattr(settings, "ingest_max_bytes", 10)
+    entry, stats, conv = harvest_tic.harvest_toc_top_n(
+        "aetna", toc, tmp_path / "payers", top_n=8)
+    assert entry is None and stats.error and "cap" in stats.error
+
+
 def test_toc_top_n_failed_file_writes_nothing(tmp_path):
     good = _write(tmp_path, "good.json", {"in_network": [{"negotiated_rates": [
         {"provider_groups": [{"npi": [int(NPI_A)]}]}]}]})

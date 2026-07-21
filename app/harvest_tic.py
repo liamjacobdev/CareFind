@@ -310,7 +310,26 @@ def harvest_toc_top_n(
         if not children:
             h.stats.error = "table-of-contents listed no in-network files"
             return None, h.finalize(), convergence
-        ranked = sorted(children, key=lambda u: _child_size(u, client), reverse=True)[:top_n]
+        # Size every child once, then drop the ones that can't physically be downloaded:
+        # the spool lands the whole gzip on disk, so a file above the byte cap would abort
+        # with DownloadTooLarge and (being a "hole") block the write entirely. Aetna's
+        # largest national file is ~8.5 GB vs a runner's ~14 GB disk, so the biggest files
+        # are exactly the ones we must skip. We take the largest files that DO fit — the
+        # union still converges, and the skip is logged loudly rather than hidden.
+        sized = [(_child_size(u, client), u) for u in children]
+        cap = settings.ingest_max_bytes
+        too_big = [(s, u) for s, u in sized if s > cap]
+        fits = sorted(((s, u) for s, u in sized if s <= cap), reverse=True)
+        if too_big:
+            print(f"[{payer_id}] skipping {len(too_big)} file(s) over the "
+                  f"{cap / 1e9:.1f} GB download cap (largest {max(s for s, _ in too_big) / 1e9:.1f} GB) "
+                  f"— they cannot be spooled on this runner; using the largest that fit.",
+                  flush=True)
+        if not fits:
+            h.stats.error = (f"every in-network file exceeds the {cap / 1e9:.1f} GB cap "
+                             f"(raise INNETWORK_INGEST_MAX_BYTES or stream without spooling)")
+            return None, h.finalize(), convergence
+        ranked = [u for _, u in fits[:top_n]]
         for i, loc in enumerate(ranked, 1):
             before = len(h.bitmap)
             h.harvest(loc)                        # unions into h.bitmap; sequential -> low disk
