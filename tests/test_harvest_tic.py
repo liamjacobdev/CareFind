@@ -308,6 +308,31 @@ def test_cli_toc_top_files_writes(tmp_path, monkeypatch, capsys):
     assert "wrote" in capsys.readouterr().out and (tmp_path / "payers" / "aetna.roaring").exists()
 
 
+def test_gzipped_url_streams_from_a_spooled_download(monkeypatch):
+    """REGRESSION (production failure, 2026-07-20): a gzipped URL must be readable.
+
+    `stream_to_spool` returns a SpooledTemporaryFile opened "w+b", and
+    `gzip.GzipFile(fileobj=...)` with NO mode INFERS the mode from `fileobj.mode` — so it
+    opened for WRITING and every gzipped URL died with "read() on write-only GzipFile
+    object". The pre-existing URL test missed it because io.BytesIO has no `.mode`, so
+    GzipFile defaulted to read; this test uses a real SpooledTemporaryFile like production.
+    """
+    import tempfile
+
+    payload = gzip.compress(json.dumps({"in_network": [
+        {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_A)]}]}]}]}).encode())
+
+    def fake_spool(src, *a, **kw):
+        sp = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b")
+        sp.write(payload)
+        sp.seek(0)
+        return sp
+
+    monkeypatch.setattr("app.download.stream_to_spool", fake_spool)
+    got, stats = _harvest("https://payer.example/in-network.json.gz")
+    assert got == {NPI_A} and stats.files == 1
+
+
 def test_open_binary_streams_a_url(tmp_path, monkeypatch):
     # The URL path goes through download.stream_to_spool; stub it to return a local spool.
     import io

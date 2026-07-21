@@ -21,7 +21,7 @@
 #   • 6h job cap — a giant that doesn't finish keeps its last-good bitmap (guard), never a partial.
 #
 # On a PUBLIC repo, GitHub Actions standard-runner minutes are unlimited, so this stays $0.
-name: Harvest verified TiC payer bitmaps
+name: "Rail 2 (TiC): harvest payer bitmaps — Aetna"
 
 on:
   schedule:
