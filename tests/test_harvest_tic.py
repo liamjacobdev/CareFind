@@ -252,7 +252,7 @@ def test_cli_allow_partial_writes(tmp_path, monkeypatch, capsys):
 
 
 # ── ToC top-N union with convergence (giant-ToC path, e.g. Aetna national) ─────
-def test_toc_top_n_unions_largest_files(tmp_path):
+def test_toc_sampled_unions_largest_files(tmp_path):
     a = _write(tmp_path, "a.json", {"in_network": [{"negotiated_rates": [
         {"provider_groups": [{"npi": [int(NPI_A), int(NPI_B), int(NPI_C)]}]}]}]})
     b = _write(tmp_path, "b.json", {"in_network": [{"negotiated_rates": [
@@ -262,30 +262,66 @@ def test_toc_top_n_unions_largest_files(tmp_path):
     toc = _write(tmp_path, "toc.json", {"reporting_structure": [
         {"reporting_plans": [{"plan_id": "p"}],
          "in_network_files": [{"location": a}, {"location": b}, {"location": c}]}]})
-    entry, stats, conv = harvest_tic.harvest_toc_top_n(
-        "aetna", toc, tmp_path / "payers", top_n=3, plateau=0.0)  # plateau 0 => harvest all
+    entry, stats, conv = harvest_tic.harvest_toc_sampled(
+        "aetna", toc, tmp_path / "payers", sample_n=3, plateau=0.0)  # plateau 0 => harvest all
     assert entry is not None and entry.count == 4        # {A,B,C,D} unioned
     assert conv[0].file == a and conv[0].added == 3      # largest file harvested first
     assert conv[-1].total == 4
 
 
-def test_toc_top_n_plateau_stops_early(tmp_path):
-    big = _write(tmp_path, "big.json", {"in_network": [{"negotiated_rates": [
+def test_stratified_pick_spans_the_size_distribution():
+    """The airtightness property: the sample must include the LARGEST file (coverage) and
+    reach down into the SMALL ones (so narrow-network plans are actually tested), rather
+    than clustering on the biggest files the way top-N-by-size does."""
+    sized = [(i * 100, f"f{i}") for i in range(1, 21)]        # 20 files, 100..2000 bytes
+    picks = harvest_tic._stratified_pick(sized, 4)
+    assert picks[0] == (2000, "f20")                          # always the largest
+    assert picks[-1][0] <= 600                                # reaches the small end
+    assert len(picks) == 4 and len(set(picks)) == 4           # distinct, spread out
+    # degenerate cases
+    assert harvest_tic._stratified_pick(sized, 0) == []
+    assert len(harvest_tic._stratified_pick(sized, 99)) == 20  # n >= population -> all
+
+
+def test_toc_sampled_harvests_every_band_no_early_stop(tmp_path, capsys):
+    """A dip in growth must NOT stop the run: the small band carries NPI_D, and quitting
+    early (the old plateau-stop) would have missed it and served it as a false 'no'."""
+    big = _write(tmp_path, "big.json", {"pad": "x" * 3000, "in_network": [{"negotiated_rates": [
         {"provider_groups": [{"npi": [int(NPI_A), int(NPI_B), int(NPI_C)]}]}]}]})
-    mid = _write(tmp_path, "mid.json", {"in_network": [{"negotiated_rates": [
-        {"provider_groups": [{"npi": [int(NPI_A), int(NPI_B)]}]}]}]})  # adds nothing new
+    mid = _write(tmp_path, "mid.json", {"pad": "x" * 1500, "in_network": [{"negotiated_rates": [
+        {"provider_groups": [{"npi": [int(NPI_A), int(NPI_B)]}]}]}]})   # adds nothing new
     small = _write(tmp_path, "small.json", {"in_network": [{"negotiated_rates": [
-        {"provider_groups": [{"npi": [int(NPI_D)]}]}]}]})
+        {"provider_groups": [{"npi": [int(NPI_D)]}]}]}]})               # unique narrow-plan NPI
     toc = _write(tmp_path, "toc.json", {"reporting_structure": [
         {"reporting_plans": [{"plan_id": "p"}], "in_network_files": [
             {"location": big}, {"location": mid}, {"location": small}]}]})
-    entry, stats, conv = harvest_tic.harvest_toc_top_n(
-        "aetna", toc, tmp_path / "payers", top_n=3, plateau=0.5)
-    assert len(conv) == 2                                # stopped after the 2nd (0% new < 50%)
-    assert entry is not None and entry.count == 3        # never harvested small.json's NPI_D
+    entry, stats, conv = harvest_tic.harvest_toc_sampled(
+        "aetna", toc, tmp_path / "payers", sample_n=3, plateau=0.005)
+    assert len(conv) == 3                          # every band sampled, no early stop
+    assert entry is not None and entry.count == 4  # NPI_D from the SMALL band is included
+    assert conv[1].growth == 0 and conv[2].growth > 0   # mid added nothing, SMALL band did
+    assert "NOT SATURATED" in capsys.readouterr().out   # flagged honestly, not hidden
 
 
-def test_toc_top_n_skips_files_over_the_download_cap(tmp_path, monkeypatch):
+def test_toc_sampled_reports_saturation_when_bands_agree(tmp_path, capsys):
+    """When every sampled band (including the small one) adds nothing new, the verdict says
+    SATURATED — the evidence that a served 'not in network' is trustworthy."""
+    a = _write(tmp_path, "a.json", {"pad": "x" * 3000, "in_network": [{"negotiated_rates": [
+        {"provider_groups": [{"npi": [int(NPI_A), int(NPI_B)]}]}]}]})
+    b = _write(tmp_path, "b.json", {"pad": "x" * 1500, "in_network": [{"negotiated_rates": [
+        {"provider_groups": [{"npi": [int(NPI_A)]}]}]}]})
+    c = _write(tmp_path, "c.json", {"in_network": [{"negotiated_rates": [
+        {"provider_groups": [{"npi": [int(NPI_B)]}]}]}]})
+    toc = _write(tmp_path, "toc.json", {"reporting_structure": [
+        {"reporting_plans": [{"plan_id": "p"}], "in_network_files": [
+            {"location": a}, {"location": b}, {"location": c}]}]})
+    entry, stats, conv = harvest_tic.harvest_toc_sampled(
+        "aetna", toc, tmp_path / "payers", sample_n=3, plateau=0.005)
+    assert entry is not None and entry.count == 2
+    assert "SATURATED" in capsys.readouterr().out and all(c.growth == 0 for c in conv[1:])
+
+
+def test_toc_sampled_skips_files_over_the_download_cap(tmp_path, monkeypatch):
     """REGRESSION (production, 2026-07-20): ranking largest-first hit Aetna's 8.5 GB file,
     which blew the download cap -> DownloadTooLarge -> counted as a hole -> nothing written.
     Oversized children must be SKIPPED (they can't be spooled) so the union proceeds using
@@ -302,33 +338,33 @@ def test_toc_top_n_skips_files_over_the_download_cap(tmp_path, monkeypatch):
          "in_network_files": [{"location": big}, {"location": small}]}]})
     monkeypatch.setattr(settings, "ingest_max_bytes", 1000)   # big > 1000 bytes, small < 1000
 
-    entry, stats, conv = harvest_tic.harvest_toc_top_n(
-        "aetna", toc, tmp_path / "payers", top_n=8, plateau=0.0)
+    entry, stats, conv = harvest_tic.harvest_toc_sampled(
+        "aetna", toc, tmp_path / "payers", sample_n=8, plateau=0.0)
     assert entry is not None                      # proceeded instead of dying on the big file
     assert entry.count == 2 and stats.failed_files == 0
     assert [c.file for c in conv] == [small]      # oversized file skipped, not attempted
 
 
-def test_toc_top_n_all_files_over_cap_reports_cleanly(tmp_path, monkeypatch):
+def test_toc_sampled_all_files_over_cap_reports_cleanly(tmp_path, monkeypatch):
     from app.config import settings
     big = _write(tmp_path, "big.json", {"pad": "x" * 5000, "in_network": [
         {"negotiated_rates": [{"provider_groups": [{"npi": [int(NPI_A)]}]}]}]})
     toc = _write(tmp_path, "toc.json", {"reporting_structure": [
         {"reporting_plans": [{"plan_id": "p"}], "in_network_files": [{"location": big}]}]})
     monkeypatch.setattr(settings, "ingest_max_bytes", 10)
-    entry, stats, conv = harvest_tic.harvest_toc_top_n(
-        "aetna", toc, tmp_path / "payers", top_n=8)
+    entry, stats, conv = harvest_tic.harvest_toc_sampled(
+        "aetna", toc, tmp_path / "payers", sample_n=8)
     assert entry is None and stats.error and "cap" in stats.error
 
 
-def test_toc_top_n_failed_file_writes_nothing(tmp_path):
+def test_toc_sampled_failed_file_writes_nothing(tmp_path):
     good = _write(tmp_path, "good.json", {"in_network": [{"negotiated_rates": [
         {"provider_groups": [{"npi": [int(NPI_A)]}]}]}]})
     toc = _write(tmp_path, "toc.json", {"reporting_structure": [
         {"reporting_plans": [{"plan_id": "p"}], "in_network_files": [
             {"location": good}, {"location": str(tmp_path / "gone.json")}]}]})
-    entry, stats, conv = harvest_tic.harvest_toc_top_n(
-        "aetna", toc, tmp_path / "payers", top_n=5, plateau=0.0)
+    entry, stats, conv = harvest_tic.harvest_toc_sampled(
+        "aetna", toc, tmp_path / "payers", sample_n=5, plateau=0.0)
     assert entry is None and stats.failed_files >= 1
     assert not (tmp_path / "payers" / "aetna.roaring").exists()
 
