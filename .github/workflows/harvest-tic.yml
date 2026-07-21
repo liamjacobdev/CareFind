@@ -40,8 +40,8 @@ on:
         description: "Recon cap on in-network files (a probe run; writes nothing). Blank = full harvest."
         required: false
         default: ""
-      toc_top_files:
-        description: "Treat url as a table-of-contents and union its N LARGEST in-network files (sequential, low-disk), stopping once the unique-NPI union plateaus. Use for Aetna's national ToC (~283 files, 850 GB) which won't fully fit a runner. Try 8."
+      toc_sample_files:
+        description: "Treat url as a table-of-contents and union N in-network files sampled ACROSS SIZE BANDS (largest + mid + narrow plans), reporting whether the union SATURATED. Use for giant ToCs like Aetna national (~283 files, 890 GB). Try 12."
         required: false
         default: ""
       max_bytes:
@@ -75,7 +75,7 @@ jobs:
           PAYER_INPUT: ${{ github.event.inputs.payer }}
           URL_INPUT: ${{ github.event.inputs.url }}
           MAX_FILES_INPUT: ${{ github.event.inputs.max_files }}
-          TOPN_INPUT: ${{ github.event.inputs.toc_top_files }}
+          TOPN_INPUT: ${{ github.event.inputs.toc_sample_files }}
           # Raise the per-file download bound so a payer's multi-GB in-network file can spool
           # (default app bound is 2 GB; Aetna's national file is ~3.3 GB). Scheduled runs use
           # the input default (5 GiB). The spool lands on the runner's ~14 GB disk, then ijson
@@ -86,7 +86,7 @@ jobs:
           MAXF=""
           if [ -n "${MAX_FILES_INPUT}" ]; then MAXF="--max-files ${MAX_FILES_INPUT}"; fi
           TOPN=""
-          if [ -n "${TOPN_INPUT}" ]; then TOPN="--toc-top-files ${TOPN_INPUT}"; fi
+          if [ -n "${TOPN_INPUT}" ]; then TOPN="--toc-sample-files ${TOPN_INPUT}"; fi
 
           if [ -n "${PAYER_INPUT}" ]; then
             # Single-payer dispatch: URL is required (falls back to tic_sources.json if blank).
@@ -123,9 +123,10 @@ jobs:
               if filt and payer != filt:
                   continue
               extra = list(maxf)
-              topn = s.get("toc_top_files")
+              # "toc_sample_files" (band sampling); "toc_top_files" kept as a legacy alias.
+              topn = s.get("toc_sample_files") or s.get("toc_top_files")
               if topn:
-                  extra += ["--toc-top-files", str(topn)]
+                  extra += ["--toc-sample-files", str(topn)]
               print(f"::group::harvest {payer}")
               # Non-fatal per payer: the completeness guard leaves last-good on any failure.
               subprocess.run(["python", "-m", "app.harvest_tic", payer, url, *extra], check=False)

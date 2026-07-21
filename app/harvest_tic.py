@@ -271,21 +271,48 @@ class Convergence:
     growth: float
 
 
-def harvest_toc_top_n(
-    payer_id: str, toc_src: str, root: Path, *, top_n: int, plateau: float = 0.005,
+def _stratified_pick(sized: list[tuple[int, str]], n: int) -> list[tuple[int, str]]:
+    """Pick `n` files SPANNING the size distribution: sort by size descending, split into `n`
+    equal-count bands, and take the largest file of each band.
+
+    Why not simply the n largest: the biggest files are a payer's broadest networks, so a
+    top-N sample can only ever show that the giants agree with each other. A provider unique
+    to a NARROW plan (a small file) would never be sampled, would be absent from the union,
+    and would then be served as a confident — and wrong — "not in network". Stratified bands
+    keep the overall largest file (maximum coverage) while forcing small/narrow plans into
+    the sample, which is precisely what makes the saturation verdict meaningful.
+    """
+    desc = sorted(sized, reverse=True)
+    if n <= 0:
+        return []
+    if n >= len(desc):
+        return desc
+    return [desc[(i * len(desc)) // n] for i in range(n)]
+
+
+def harvest_toc_sampled(
+    payer_id: str, toc_src: str, root: Path, *, sample_n: int, plateau: float = 0.005,
     complete_only: bool = True,
 ) -> tuple[membership.ManifestEntry | None, TicStats, list[Convergence]]:
-    """Harvest the UNION of a payer's N largest in-network files from a TiC table-of-contents,
-    stopping early once the unique-NPI union plateaus (a file adds < `plateau` fraction new).
+    """Harvest the UNION of `sample_n` in-network files sampled ACROSS SIZE BANDS from a TiC
+    table-of-contents, and report whether the union saturated.
 
     Why this exists: a payer's full ToC can fan out to hundreds of multi-GB files (Aetna's
-    national ToC ≈ 283 files ≈ 850 GB) — too big for one job, AND a single plan file served as
-    the payer's WHOLE network fabricates "no" for providers in its other plans. Payers repeat
-    the same provider network across plans, so unioning the broadest few files converges on the
-    complete national set; the plateau is the empirical completeness signal (LOGGED, never
-    hidden — the operator reads it before trusting the result). Files stream sequentially so
-    peak disk stays ~one file (runner-feasible), not the sum. Writes only if EVERY file it
-    pulled completed (completeness guard) — a hole keeps last-good.
+    national ToC ≈ 283 files ≈ 890 GB) — far too big for one job, AND a single plan file served
+    as the payer's WHOLE network fabricates "no" for providers in its other plans. Payers
+    largely repeat one provider network across plans, so a union of sampled plans converges on
+    the complete national set.
+
+    The sample is STRATIFIED, not the n largest (see `_stratified_pick`): the largest files are
+    the broadest networks, so a top-N sample can only show that the giants agree with each
+    other, leaving providers unique to a NARROW plan absent from the union and served as a
+    confident, wrong "not in network". Bands force small plans into the sample, so the
+    saturation verdict actually means something. There is deliberately NO early plateau-stop —
+    quitting on the first dip would skip the very bands the claim rests on.
+
+    Files stream sequentially so peak disk stays ~one file (runner-feasible), not the sum.
+    Children above the download cap are skipped (they cannot be spooled). Writes only if EVERY
+    file it pulled completed (completeness guard) — a hole keeps last-good.
     """
     if payer_id not in _CATALOG_IDS:
         print(f"Warning: '{payer_id}' is not in app/catalog.py — it won't surface as a "
@@ -329,23 +356,46 @@ def harvest_toc_top_n(
             h.stats.error = (f"every in-network file exceeds the {cap / 1e9:.1f} GB cap "
                              f"(raise INNETWORK_INGEST_MAX_BYTES or stream without spooling)")
             return None, h.finalize(), convergence
-        ranked = [u for _, u in fits[:top_n]]
-        for i, loc in enumerate(ranked, 1):
+        picks = _stratified_pick(fits, sample_n)
+        print(f"[{payer_id}] sampling {len(picks)} of {len(fits)} eligible files across size "
+              f"bands ({picks[0][0] / 1e9:.2f} GB … {picks[-1][0] / 1e9:.2f} GB) — spanning the "
+              f"distribution so NARROW-network plans are tested, not just the biggest.",
+              flush=True)
+        for i, (sz, loc) in enumerate(picks, 1):
             before = len(h.bitmap)
             h.harvest(loc)                        # unions into h.bitmap; sequential -> low disk
             total = len(h.bitmap)
             added = total - before
             growth = (added / total) if total else 0.0
             convergence.append(Convergence(loc, added, total, growth))
-            print(f"[{payer_id}] file {i}/{len(ranked)} +{added:,} -> {total:,} unique "
-                  f"(+{growth * 100:.2f}%) failed_files={h.stats.failed_files}", flush=True)
+            print(f"[{payer_id}] band {i}/{len(picks)} ({sz / 1e9:.2f} GB) +{added:,} -> "
+                  f"{total:,} unique (+{growth * 100:.2f}%) "
+                  f"failed_files={h.stats.failed_files}", flush=True)
             if h.stats.failed_files:
                 break                             # a hole -> the guard will refuse the write
-            if i >= 2 and growth < plateau:
-                print(f"[{payer_id}] union plateaued (<{plateau * 100:.2f}% new) — network "
-                      f"saturated across plans, stopping.", flush=True)
-                break
+            # NOTE: deliberately no early plateau-stop here. Stopping as soon as growth dips
+            # would quit before the small/narrow bands are sampled — exactly the files the
+            # saturation claim depends on.
     stats = h.finalize()
+
+    # Saturation verdict. Because the bands span the size distribution, "no band after the
+    # first added materially" is real evidence the payer repeats ONE network across its plans
+    # and the union is effectively its whole network — which is what makes a served, verified
+    # "false" trustworthy rather than a fabricated "no". Reported either way, never hidden.
+    later = [c.growth for c in convergence[1:]]
+    if later:
+        worst = max(later)
+        if worst < plateau:
+            print(f"[{payer_id}] SATURATED: no sampled band added more than {worst * 100:.2f}% "
+                  f"(< {plateau * 100:.2f}%) across {len(convergence)} bands — the union is "
+                  f"effectively the payer's whole network; verified 'not in network' answers "
+                  f"are well-supported.", flush=True)
+        else:
+            print(f"[{payer_id}] NOT SATURATED: a sampled band added {worst * 100:.2f}% new "
+                  f"NPIs (>= {plateau * 100:.2f}%). The network is NOT uniform across plans, so "
+                  f"providers in unsampled plans may be missing and would read as a false "
+                  f"'no' — raise the sample count before trusting negatives.", flush=True)
+
     if stats.unique_npis == 0:
         return None, stats, convergence
     if complete_only and not stats.complete:
@@ -368,12 +418,14 @@ def main(argv: list[str]) -> None:
     ap.add_argument("--max-files", type=int, default=None,
                     help="recon cap on in-network files streamed; hitting it marks the run "
                          "incomplete (a probe never writes a partial set as complete)")
-    ap.add_argument("--toc-top-files", type=int, default=None, metavar="N",
-                    help="treat src as a table-of-contents and union its N LARGEST in-network "
-                         "files (sequential, low-disk), stopping once the unique-NPI union "
-                         "plateaus — for giant ToCs that don't fit a job (e.g. Aetna national)")
+    ap.add_argument("--toc-sample-files", "--toc-top-files", type=int, default=None,
+                    metavar="N", dest="toc_sample_files",
+                    help="treat src as a table-of-contents and union N in-network files sampled "
+                         "ACROSS SIZE BANDS (largest + mid + narrow plans) — for giant ToCs that "
+                         "don't fit a job (e.g. Aetna national). --toc-top-files is a legacy alias")
     ap.add_argument("--plateau", type=float, default=0.005,
-                    help="with --toc-top-files: stop once a file adds < this fraction new NPIs "
+                    help="saturation threshold: if no sampled band after the first adds this "
+                         "fraction of new NPIs, the union is reported SATURATED "
                          "(default 0.005 = 0.5%%)")
     ap.add_argument("--allow-partial", action="store_true",
                     help="opt out of the completeness guard and write whatever was collected "
@@ -382,9 +434,9 @@ def main(argv: list[str]) -> None:
 
     root = Path(settings.membership_dir)
     payer = args.payer
-    if args.toc_top_files is not None:
-        entry, stats, convergence = harvest_toc_top_n(
-            args.payer, args.src, root, top_n=args.toc_top_files, plateau=args.plateau,
+    if args.toc_sample_files is not None:
+        entry, stats, convergence = harvest_toc_sampled(
+            args.payer, args.src, root, sample_n=args.toc_sample_files, plateau=args.plateau,
             complete_only=not args.allow_partial)
     else:
         entry, stats = harvest_to_bitmap(args.payer, args.src, root,

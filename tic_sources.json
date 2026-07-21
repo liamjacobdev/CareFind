@@ -14,9 +14,9 @@
     {
       "payer": "aetna",
       "url": "https://mrf.healthsparq.com/aetnacvs-egress.nophi.kyruushsq.com/prd/mrf/AETNACVS_I/ALICFI/2026-07-05/tableOfContents/2026-07-05_Aetna-Life-Insurance-Company_index.json.gz",
-      "toc_top_files": 8,
-      "retrieved": "2026-07-20",
-      "note": "Aetna Life Insurance Company national ToC (13 plans -> ~283 in-network files). toc_top_files unions the 8 LARGEST (broadest national networks, ~3.3 GB each, streamed sequentially so peak disk ~one file) and stops once the unique-NPI union plateaus. WATCH the job log's convergence lines: if the last file adds <~0.5% new NPIs, the national set is effectively complete; if it's still climbing, raise toc_top_files. Needs INNETWORK_INGEST_MAX_BYTES > 3.4 GB (workflow default 5 GiB)."
+      "toc_sample_files": 12,
+      "retrieved": "2026-07-21",
+      "note": "Aetna Life Insurance Company national ToC (13 plans -> ~283 in-network files, ~890 GB total, so it can never be fully fanned out in one job). toc_sample_files unions 12 files sampled ACROSS SIZE BANDS — the largest (broadest network, ~4.8 GB) down to the smallest (narrow plans) — streamed sequentially so peak disk stays ~one file. Band sampling (not top-N-by-size) is what makes the result airtight: sampling only the giants can only show the giants agree, leaving a provider unique to a NARROW plan absent and served as a confident false 'no'. WATCH the verdict line: 'SATURATED' means no sampled band added >0.5% and negatives are trustworthy; 'NOT SATURATED' means raise this number. Needs INNETWORK_INGEST_MAX_BYTES > 4.9 GB (workflow default 5 GiB); the 2 files over that cap are skipped automatically."
     }
   ],
 
